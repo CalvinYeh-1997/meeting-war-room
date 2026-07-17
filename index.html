@@ -17,8 +17,8 @@
   --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Courier New',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:var(--bg);color:var(--text);font-family:var(--font);display:flex;flex-direction:column;overflow:hidden}
+html,body{height:100%;min-height:100%}
+body{height:100dvh;background:var(--bg);color:var(--text);font-family:var(--font);display:flex;flex-direction:column;overflow:hidden}
 button{font-family:inherit;cursor:pointer;background:none;border:none;color:inherit}
 input,textarea,select{font-family:inherit;color:var(--text)}
 :focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:2px}
@@ -80,11 +80,20 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
 #langSel{padding:4px 6px;border-radius:5px;font-size:12px;background:var(--panel-soft);color:var(--muted);border:1px solid var(--line)}
 #btnRec{padding:6px 12px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid var(--rec);color:var(--rec);background:var(--rec-soft)}
 #btnRec.on{background:var(--rec);color:#fff}
-#transcript{flex:1;min-height:0;overflow-y:auto;padding:12px}
+#transcript{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px}
+.speech-status{display:flex;align-items:center;gap:6px;max-width:210px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;color:var(--faint);font-size:11px;white-space:nowrap;overflow:hidden}
+.speech-status .status-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.speech-status .status-text{overflow:hidden;text-overflow:ellipsis}
+.speech-status[data-state="listening"]{border-color:var(--green);color:var(--green);background:var(--green-soft)}
+.speech-status[data-state="listening"] .status-dot{background:var(--green)}
+.speech-status[data-state="working"],.speech-status[data-state="warning"]{border-color:var(--amber);color:var(--amber);background:var(--amber-soft)}
+.speech-status[data-state="working"] .status-dot,.speech-status[data-state="warning"] .status-dot{background:var(--amber)}
+.speech-status[data-state="error"],.speech-status[data-state="unsupported"]{border-color:var(--rec);color:var(--rec);background:var(--rec-soft)}
+.speech-status[data-state="error"] .status-dot,.speech-status[data-state="unsupported"] .status-dot{background:var(--rec)}
 .seg{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
 .seg .tc{flex:none;min-width:44px;padding-top:2px;font-family:var(--mono);font-size:12px;color:var(--faint)}
 .seg .tx{font-size:13px;line-height:1.7}
-.seg.manual .tx{color:var(--muted)}
+.seg.manual .tx,.seg.partial .tx{color:var(--muted)}
 .seg .tag{display:inline-block;margin-right:4px;padding:0 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;color:var(--faint)}
 #interimLine{display:none}
 #interimLine.show{display:flex}
@@ -154,6 +163,12 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
 /* ── Toast ── */
 #toast{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:999px;font-size:13px;background:var(--panel-soft);border:1px solid var(--line)}
 #toast.show{display:block}
+@media (max-width:640px){
+  header{padding:8px 10px}
+  #meetingTitle{order:3;flex-basis:100%}
+  .speech-status{max-width:150px}
+  #manualRow{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+}
 </style>
 </head>
 <body data-tab="live">
@@ -163,7 +178,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
     <span class="dot" id="recDot"></span>
     <div>
       <div class="name">會議戰情室</div>
-      <div class="eyebrow">MEETING WAR ROOM · v0.3 STANDALONE</div>
+      <div class="eyebrow">PM FACILITATOR · v0.4 STANDALONE</div>
     </div>
   </div>
   <input id="meetingTitle" placeholder="輸入會議名稱…" />
@@ -173,7 +188,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
   <button class="btn" id="btnReset" title="清除本場">清除</button>
 </header>
 
-<div id="errBar"><span class="mark">!</span><span id="errMsg"></span><button id="errClose" class="x">✕</button></div>
+<div id="errBar" role="alert"><span class="mark">!</span><span id="errMsg"></span><button id="errClose" class="x" aria-label="關閉錯誤訊息">✕</button></div>
 
 <div class="tabs">
   <button class="tab" data-tab="pb">作戰手冊</button>
@@ -203,22 +218,25 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
     <div class="col-head">
       <div><div class="eyebrow">LIVE TRANSCRIPT</div><div class="t">即時逐字稿</div></div>
       <div style="display:flex;align-items:center;gap:6px">
+        <div class="speech-status" id="speechStatus" data-state="idle" role="status" aria-live="polite" title="語音辨識狀態">
+          <span class="status-dot"></span><span class="status-text" id="speechStatusText">尚未開始</span>
+        </div>
         <select id="langSel">
           <option value="zh-TW">中文(台灣)</option>
           <option value="en-US">English</option>
         </select>
         <button class="mini" id="btnDownloadT" style="display:none">下載</button>
-        <button id="btnRec">● 開始錄音</button>
+        <button id="btnRec" aria-pressed="false">● 開始錄音</button>
       </div>
     </div>
     <div id="transcript">
       <div class="empty" id="emptyLive">
         <div class="big">🎙</div>
         <div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div>
-        <div class="sub">即時辨識需要桌面版 Chrome 或 Edge 並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>
+        <div class="sub">即時辨識需要桌面版 Chrome 或 Edge、HTTPS/localhost,並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>
       </div>
       <div id="segList"></div>
-      <div class="seg" id="interimLine"><span class="tc">--:--</span><span class="tx"><span id="interimText"></span><span class="caret">▍</span></span></div>
+      <div class="seg" id="interimLine" role="status" aria-live="polite"><span class="tc">即時</span><span class="tx"><span id="interimText"></span><span class="caret">▍</span></span></div>
     </div>
     <div id="manualRow">
       <input id="manualInput" placeholder="手動輸入一句對話(測試或補充用),按 Enter 加入" />
@@ -292,7 +310,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
         <div class="field"><label for="claModel">模型名稱</label><input id="claModel" autocomplete="off" /></div>
         <div class="help">拿金鑰:到 <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> 註冊並小額儲值後,在 API Keys 建立。注意:這與 Claude.ai 訂閱分開計費。</div>
       </div>
-      <div class="help" style="margin-top:4px">隱私:金鑰與會議資料只存在這台裝置的瀏覽器裡,不會上傳到任何伺服器;AI 呼叫由你的瀏覽器直接連到 Google / Anthropic。請勿在共用電腦儲存金鑰。</div>
+      <div class="help" style="margin-top:4px">隱私:金鑰與本場資料會保存在這台裝置的瀏覽器;當你使用 AI 功能時,相關 Playbook 與逐字稿會由瀏覽器直接傳送到所選的 Google / Anthropic 服務。請勿在共用電腦儲存金鑰或處理機密會議。</div>
     </div>
     <div class="modal-foot">
       <button class="btn" id="btnTestSet">測試連線</button>
@@ -302,7 +320,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
   </div>
 </div>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -350,6 +368,7 @@ function currentKey(){ return settings.provider === "gemini" ? settings.geminiKe
 
 /* ───────────────────────── 狀態 ───────────────────────── */
 const state = {
+  starting: false,
   recording: false,
   segments: [],        // {id, t, text, source}
   advices: [],         // {id, t, kind, auto, text}
@@ -357,15 +376,19 @@ const state = {
   elapsed: 0,
   startTime: 0,
   radarOn: false,
+  interim: "",
+  userStopping: false,
+  restartAttempts: 0,
   lastScan: { count: 0, time: 0 },
   busy: { tactic:false, crux:false, goal:false, summary:false }
 };
 let recognition = null;
 let restartTimer = null;
 let tickTimer = null;
+let stopFinalizeTimer = null;
 
 /* ───────────────────────── 場次自動存檔 ───────────────────────── */
-const saveSession = debounce(() => {
+function persistSession(){
   try {
     localStorage.setItem("wr-session", JSON.stringify({
       title: $("meetingTitle").value,
@@ -377,7 +400,8 @@ const saveSession = debounce(() => {
       savedAt: Date.now()
     }));
   } catch(_){}
-}, 400);
+}
+const saveSession = debounce(persistSession, 400);
 
 function restoreSession(){
   try {
@@ -492,10 +516,24 @@ ${full}
 
 /* ───────────────────────── AI 呼叫(雙引擎)───────────────────────── */
 function friendlyApiError(status, provider){
+  if (status === 400) return provider + " 請求格式或模型設定有誤,請到 ⚙ 設定確認模型名稱。";
   if (status === 401 || status === 403) return provider + " 金鑰無效或未授權,請到 ⚙ 設定檢查金鑰。";
   if (status === 404) return provider + " 模型名稱可能有誤,請到 ⚙ 設定確認模型欄位。";
   if (status === 429) return provider + " 請求太頻繁或額度已用盡,稍等再試。";
   return provider + " 服務回應錯誤(" + status + "),請稍後重試。";
+}
+
+async function fetchWithTimeout(url, options, ms){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms || 30000);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e){
+    if (e && e.name === "AbortError") throw new Error("AI 服務等待超過 30 秒,請稍後重試。");
+    throw new Error("無法連線到 AI 服務。請檢查網路、瀏覽器擴充功能或公司防火牆設定。");
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function callAI(prompt){
@@ -507,14 +545,14 @@ async function callAI(prompt){
     const url = "https://generativelanguage.googleapis.com/v1beta/models/"
       + encodeURIComponent(settings.geminiModel.trim())
       + ":generateContent?key=" + encodeURIComponent(settings.geminiKey.trim());
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 1024 }
       })
-    });
+    }, 30000);
     if (!res.ok) throw new Error(friendlyApiError(res.status, "Gemini"));
     const data = await res.json();
     const parts = data && data.candidates && data.candidates[0]
@@ -523,7 +561,7 @@ async function callAI(prompt){
     if (!text) throw new Error("Gemini 未回傳內容(可能被安全機制攔下),請換個說法再試。");
     return text;
   } else {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -536,7 +574,7 @@ async function callAI(prompt){
         max_tokens: 1024,
         messages: [{ role: "user", content: prompt }]
       })
-    });
+    }, 30000);
     if (!res.ok) throw new Error(friendlyApiError(res.status, "Claude"));
     const data = await res.json();
     const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
@@ -552,14 +590,14 @@ function nowElapsed(){
 
 function appendSegNode(seg){
   const row = document.createElement("div");
-  row.className = "seg" + (seg.source === "manual" ? " manual" : "");
+  row.className = "seg" + (seg.source === "manual" ? " manual" : seg.source === "voice-partial" ? " partial" : "");
   const tc = document.createElement("span");
   tc.className = "tc"; tc.textContent = fmt(seg.t);
   const tx = document.createElement("span");
   tx.className = "tx";
-  if (seg.source === "manual"){
+  if (seg.source === "manual" || seg.source === "voice-partial"){
     const tag = document.createElement("span");
-    tag.className = "tag"; tag.textContent = "手動";
+    tag.className = "tag"; tag.textContent = seg.source === "manual" ? "手動" : "語音暫存";
     tx.appendChild(tag);
   }
   tx.appendChild(document.createTextNode(seg.text));
@@ -568,7 +606,9 @@ function appendSegNode(seg){
 }
 
 function pushSegment(text, source){
-  const seg = { id: Date.now() + Math.random(), t: nowElapsed(), text, source };
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return;
+  const seg = { id: Date.now() + Math.random(), t: nowElapsed(), text: clean, source };
   state.segments.push(seg);
   appendSegNode(seg);
   refreshChrome();
@@ -582,11 +622,15 @@ function scrollTranscript(){
 }
 
 function setInterim(text){
-  if (text){
-    $("interimText").textContent = text;
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  state.interim = clean;
+  if (clean){
+    $("interimText").textContent = clean;
     $("interimLine").classList.add("show");
+    if ($("emptyLive")) $("emptyLive").style.display = "none";
   } else {
     $("interimLine").classList.remove("show");
+    if ($("emptyLive") && !state.segments.length) $("emptyLive").style.display = "";
   }
   scrollTranscript();
 }
@@ -600,69 +644,205 @@ function transcriptMD(){
 }
 
 /* ───────────────────────── 語音辨識 ───────────────────────── */
-function startRecording(){
+function setSpeechStatus(kind, text){
+  $("speechStatus").dataset.state = kind;
+  $("speechStatusText").textContent = text;
+  $("speechStatus").title = text;
+}
+
+function freezeElapsed(){
+  if (state.recording && state.startTime){
+    state.elapsed = Math.max(state.elapsed, Math.floor((Date.now() - state.startTime)/1000));
+  }
+}
+
+function speechEnvironmentHint(){
+  if (location.protocol === "file:") return "目前是直接開啟 HTML 的 file:// 模式;請改用 HTTPS 網址或 localhost 開啟。";
+  if (!window.isSecureContext) return "目前不是安全連線;請改用 HTTPS 網址或 localhost 開啟。";
+  return "請確認網路、VPN 或公司防火牆沒有阻擋瀏覽器的語音辨識服務。";
+}
+
+async function preflightMicrophone(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    throw new Error("這個開啟方式無法存取麥克風。" + speechEnvironmentHint());
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e){
+    const name = e && e.name;
+    if (name === "NotAllowedError" || name === "SecurityError"){
+      throw new Error("麥克風權限被拒絕。請在網址列左側的網站權限允許麥克風後重試。");
+    }
+    if (name === "NotFoundError" || name === "DevicesNotFoundError"){
+      throw new Error("找不到可用的麥克風,請先連接或啟用麥克風後重試。");
+    }
+    if (name === "NotReadableError" || name === "TrackStartError"){
+      throw new Error("麥克風目前無法讀取,可能正被其他程式占用。請關閉其他錄音程式後重試。");
+    }
+    throw new Error("麥克風檢查失敗:" + ((e && e.message) || "未知錯誤"));
+  } finally {
+    if (stream) stream.getTracks().forEach(track => track.stop());
+  }
+}
+
+function finalizeUserStop(){
+  clearTimeout(stopFinalizeTimer);
+  if (state.userStopping && state.interim) pushSegment(state.interim, "voice-partial");
+  state.userStopping = false;
+  setInterim("");
+  setSpeechStatus("idle", "已暫停");
+  saveSession();
+}
+
+function failSpeech(message){
+  freezeElapsed();
+  state.recording = false;
+  state.starting = false;
+  state.userStopping = false;
+  clearTimeout(restartTimer);
+  clearTimeout(stopFinalizeTimer);
+  setInterim("");
+  stopChrome();
+  setSpeechStatus("error", "辨識中斷");
+  showErr(message);
+}
+
+function handleSpeechError(code){
+  if (code === "no-speech"){
+    setSpeechStatus("warning", "未偵測到語音,持續聆聽…");
+    return;
+  }
+  if (code === "aborted"){
+    if (!state.userStopping && state.recording) setSpeechStatus("working", "語音服務重連中…");
+    return;
+  }
+  const messages = {
+    "not-allowed": "無法取得麥克風權限。請在網址列左側允許麥克風後重試。",
+    "service-not-allowed": "瀏覽器或系統已禁止語音辨識服務。請檢查網站與系統的麥克風權限。",
+    "audio-capture": "無法讀取麥克風,可能未連接、被停用或正被其他程式占用。",
+    "network": "語音辨識服務連線失敗。" + speechEnvironmentHint(),
+    "language-not-supported": "語音辨識不支援目前選擇的語言,請切換語言後重試。",
+    "bad-grammar": "語音辨識設定無效,請重新整理頁面後重試。"
+  };
+  failSpeech(messages[code] || ("語音辨識發生錯誤(" + code + "),請暫停後重試。"));
+}
+
+function scheduleRecognitionRestart(rec){
+  if (!state.recording || recognition !== rec) return;
+  clearTimeout(restartTimer);
+  state.restartAttempts += 1;
+  if (state.restartAttempts > 5){
+    failSpeech("語音辨識服務多次重連失敗。" + speechEnvironmentHint());
+    return;
+  }
+  setSpeechStatus("working", "語音服務重連中…");
+  const delay = Math.min(2400, 350 * Math.pow(1.6, state.restartAttempts - 1));
+  restartTimer = setTimeout(() => {
+    if (!state.recording || recognition !== rec) return;
+    try { rec.start(); }
+    catch (_) { scheduleRecognitionRestart(rec); }
+  }, delay);
+}
+
+function createRecognition(SR){
+  const rec = new SR();
+  rec.lang = $("langSel").value;
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  rec.onstart = () => {
+    state.restartAttempts = 0;
+    setSpeechStatus("listening", "正在聆聽");
+  };
+  rec.onaudiostart = () => setSpeechStatus("listening", "麥克風已連線");
+  rec.onspeechstart = () => setSpeechStatus("listening", "偵測到語音");
+  rec.onspeechend = () => setSpeechStatus("working", "正在轉成文字…");
+  rec.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++){
+      const result = e.results[i];
+      const spoken = result[0] && result[0].transcript;
+      if (result.isFinal){
+        if (spoken) pushSegment(spoken, "voice");
+      } else if (spoken){
+        interim += spoken;
+      }
+    }
+    setInterim(interim);
+    setSpeechStatus(interim ? "working" : "listening", interim ? "即時辨識中…" : "正在聆聽");
+  };
+  rec.onerror = (e) => handleSpeechError(e.error || "unknown");
+  rec.onend = () => {
+    if (state.userStopping){
+      finalizeUserStop();
+      return;
+    }
+    setInterim("");
+    if (state.recording) scheduleRecognitionRestart(rec);
+  };
+  return rec;
+}
+
+async function startRecording(){
+  if (state.starting || state.recording) return;
   hideErr();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR){
-    showErr("此瀏覽器不支援即時語音辨識,建議改用桌面版 Chrome 或 Edge。也可以先用逐字稿欄底部的手動輸入,測試完整流程。");
+    setSpeechStatus("unsupported", "瀏覽器不支援");
+    showErr("此瀏覽器不支援即時語音辨識,請改用桌面版 Chrome 或 Edge。也可以先用逐字稿欄底部的手動輸入測試流程。");
     return;
   }
+  state.starting = true;
+  $("btnRec").disabled = true;
+  setSpeechStatus("working", "正在檢查麥克風…");
   try {
-    const rec = new SR();
-    rec.lang = $("langSel").value;
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++){
-        const r = e.results[i];
-        if (r.isFinal){
-          const clean = r[0].transcript.trim();
-          if (clean) pushSegment(clean, "voice");
-        } else {
-          interim += r[0].transcript;
-        }
-      }
-      setInterim(interim);
-    };
-    rec.onerror = (e) => {
-      if (e.error === "no-speech" || e.error === "aborted") return;
-      if (e.error === "not-allowed" || e.error === "service-not-allowed"){
-        state.recording = false;
-        stopChrome();
-        showErr("無法取得麥克風權限。請在網址列左側允許麥克風後重試;或先用手動輸入測試流程。");
-      }
-    };
-    rec.onend = () => {
-      setInterim("");
-      if (state.recording){
-        restartTimer = setTimeout(() => { try { rec.start(); } catch(_){} }, 300);
-      }
-    };
+    await preflightMicrophone();
+    const rec = createRecognition(SR);
     recognition = rec;
     state.startTime = Date.now() - state.elapsed * 1000;
+    state.userStopping = false;
+    state.restartAttempts = 0;
     state.recording = true;
     rec.start();
     startChrome();
+    setSpeechStatus("working", "正在啟動辨識…");
   } catch (e){
-    showErr("語音辨識啟動失敗:" + e.message);
+    state.recording = false;
+    recognition = null;
+    stopChrome();
+    setSpeechStatus("error", "無法開始");
+    showErr((e && e.message) || "語音辨識啟動失敗,請稍後重試。");
+  } finally {
+    state.starting = false;
+    $("btnRec").disabled = false;
   }
 }
 
 function stopRecording(){
+  if (!state.recording) return;
+  freezeElapsed();
   state.recording = false;
+  state.userStopping = true;
   clearTimeout(restartTimer);
-  setInterim("");
-  try { recognition && recognition.stop(); } catch(_){}
   stopChrome();
-  saveSession();
+  setSpeechStatus("working", "正在完成最後一句…");
+  try {
+    if (recognition) recognition.stop();
+    else finalizeUserStop();
+  } catch(_){
+    finalizeUserStop();
+  }
+  stopFinalizeTimer = setTimeout(finalizeUserStop, 1200);
 }
 
 function startChrome(){
   $("btnRec").textContent = "■ 暫停";
   $("btnRec").classList.add("on");
+  $("btnRec").setAttribute("aria-pressed", "true");
   $("recDot").classList.add("on","pulse");
   $("langSel").disabled = true;
+  clearInterval(tickTimer);
   tickTimer = setInterval(() => {
     state.elapsed = Math.floor((Date.now() - state.startTime)/1000);
     $("timerBox").textContent = "REC " + fmt(state.elapsed);
@@ -675,6 +855,7 @@ function startChrome(){
 function stopChrome(){
   $("btnRec").textContent = "● 開始錄音";
   $("btnRec").classList.remove("on");
+  $("btnRec").setAttribute("aria-pressed", "false");
   $("recDot").classList.remove("on","pulse");
   $("langSel").disabled = false;
   clearInterval(tickTimer);
@@ -831,7 +1012,14 @@ function refreshChrome(){
 
 function resetSession(){
   if (!window.confirm("清除本場所有逐字稿、建議與紀錄?此操作無法復原。")) return;
-  stopRecording();
+  freezeElapsed();
+  state.recording = false; state.starting = false; state.userStopping = false;
+  clearTimeout(restartTimer); clearTimeout(stopFinalizeTimer);
+  try { recognition && recognition.abort(); } catch(_){}
+  recognition = null;
+  setInterim("");
+  stopChrome();
+  setSpeechStatus("idle", "尚未開始");
   state.segments = []; state.advices = []; state.summary = "";
   state.elapsed = 0; state.lastScan = { count: 0, time: 0 };
   $("segList").innerHTML = "";
@@ -839,7 +1027,7 @@ function resetSession(){
   if (!$("emptyLive")){
     const d = document.createElement("div");
     d.className = "empty"; d.id = "emptyLive";
-    d.innerHTML = '<div class="big">🎙</div><div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div><div class="sub">即時辨識需要桌面版 Chrome 或 Edge 並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>';
+    d.innerHTML = '<div class="big">🎙</div><div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div><div class="sub">即時辨識需要桌面版 Chrome 或 Edge、HTTPS/localhost,並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>';
     $("transcript").insertBefore(d, $("segList"));
   }
   try { localStorage.removeItem("wr-session"); } catch(_){}
@@ -944,10 +1132,42 @@ document.addEventListener("keydown", (e) => {
     $("setModal").classList.remove("show");
   }
 });
+window.addEventListener("offline", () => {
+  if (state.recording) failSpeech("網路已中斷,即時語音辨識已停止。恢復連線後請重新開始錄音。");
+  else setSpeechStatus("warning", "目前離線");
+});
+window.addEventListener("online", () => {
+  if (!state.recording) setSpeechStatus("idle", "網路已恢復");
+});
+window.addEventListener("beforeunload", () => {
+  freezeElapsed();
+  persistSession();
+  state.recording = false; state.userStopping = false;
+  clearTimeout(restartTimer); clearTimeout(stopFinalizeTimer);
+  try { recognition && recognition.abort(); } catch(_){}
+});
+
+function initializeSpeechStatus(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){
+    setSpeechStatus("unsupported", "瀏覽器不支援");
+    return;
+  }
+  if (!navigator.onLine){
+    setSpeechStatus("warning", "目前離線");
+    return;
+  }
+  if (location.protocol === "file:" || !window.isSecureContext){
+    setSpeechStatus("warning", "建議改用 HTTPS");
+    return;
+  }
+  setSpeechStatus("idle", "準備就緒");
+}
 
 /* ───────────────────────── 啟動 ───────────────────────── */
 restoreSession();
 refreshChrome();
+initializeSpeechStatus();
 if (!currentKey()){
   setTimeout(() => flash("首次使用:請先按右上「⚙ 設定」貼上 API 金鑰"), 800);
 }
