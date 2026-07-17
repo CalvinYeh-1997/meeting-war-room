@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>會議戰情室 · Meeting War Room</title>
+<style>
+:root{
+  --bg:#101216; --panel:#171A21; --panel-soft:#1D222B;
+  --line:#2A303C; --line-soft:#232833;
+  --text:#EAE8E3; --muted:#9AA1AD; --faint:#656C79;
+  --rec:#E5484D; --rec-soft:rgba(229,72,77,.12);
+  --amber:#E8A33D; --amber-soft:rgba(232,163,61,.10);
+  --green:#57B27E; --green-soft:rgba(87,178,126,.12);
+  --blue:#5C9DDE; --blue-soft:rgba(92,157,222,.12);
+  --font:'Noto Sans TC','PingFang TC','Microsoft JhengHei',system-ui,-apple-system,sans-serif;
+  --mono:ui-monospace,'SF Mono','Cascadia Mono',Consolas,'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);display:flex;flex-direction:column;overflow:hidden}
+button{font-family:inherit;cursor:pointer;background:none;border:none;color:inherit}
+input,textarea,select{font-family:inherit;color:var(--text)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:2px}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes wr-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes wr-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.pulse{animation:wr-pulse 1.4s ease-in-out infinite}
+.caret{animation:wr-blink 1s step-end infinite;color:var(--amber)}
+@media (prefers-reduced-motion:reduce){.pulse,.caret{animation:none}}
+
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--faint);text-transform:uppercase}
+
+/* ── 頂部列 ── */
+header{display:flex;align-items:center;gap:12px;padding:8px 16px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:center;gap:8px}
+.brand .name{font-weight:700;font-size:14px;line-height:1.2}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--faint);display:inline-block;flex:none}
+.dot.on{background:var(--rec)}
+#meetingTitle{flex:1;min-width:140px;padding:4px 8px;font-size:14px;background:transparent;border:none;border-bottom:1px solid var(--line)}
+#timerBox{font-family:var(--mono);font-size:14px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
+#timerBox.on{color:var(--rec);background:var(--rec-soft);border-color:var(--rec)}
+.btn{padding:6px 12px;border-radius:6px;font-size:13px;border:1px solid var(--line);color:var(--muted)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn-green{border-color:var(--green);color:var(--green)}
+.btn-green.lit{background:var(--green-soft)}
+.btn-solid-green{background:var(--green);color:#10241A;border:none;font-weight:600}
+
+/* ── 錯誤列 / 分頁 ── */
+#errBar{display:none;align-items:flex-start;gap:8px;padding:8px 16px;font-size:13px;background:var(--rec-soft);border-bottom:1px solid var(--rec)}
+#errBar.show{display:flex}
+#errBar .mark{color:var(--rec);font-weight:700}
+#errMsg{flex:1;line-height:1.5}
+.tabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel)}
+.tab{flex:1;padding:9px 0;font-size:13px;color:var(--muted);border-bottom:2px solid transparent}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber);font-weight:700}
+
+/* ── 三欄 ── */
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+section{display:none;flex-direction:column;min-height:0}
+body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"] #col-adv{display:flex}
+.col-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line-soft);background:var(--panel)}
+.col-head .t{font-size:14px;font-weight:700}
+.mini{padding:4px 8px;border-radius:5px;font-size:12px;border:1px solid var(--line);color:var(--muted)}
+
+@media (min-width:1025px){
+  .tabs{display:none}
+  main{display:grid;grid-template-columns:3fr 5fr 4fr}
+  section{display:flex !important}
+  #col-pb,#col-live{border-right:1px solid var(--line)}
+}
+
+/* ── Playbook 欄 ── */
+#playbook{flex:1;min-height:0;width:100%;padding:12px;font-size:13px;line-height:1.7;resize:none;background:transparent;border:none}
+#pbFoot{padding:6px 12px;font-size:12px;color:var(--faint);border-top:1px solid var(--line-soft)}
+
+/* ── 逐字稿欄 ── */
+#langSel{padding:4px 6px;border-radius:5px;font-size:12px;background:var(--panel-soft);color:var(--muted);border:1px solid var(--line)}
+#btnRec{padding:6px 12px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid var(--rec);color:var(--rec);background:var(--rec-soft)}
+#btnRec.on{background:var(--rec);color:#fff}
+#transcript{flex:1;min-height:0;overflow-y:auto;padding:12px}
+.seg{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
+.seg .tc{flex:none;min-width:44px;padding-top:2px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+.seg .tx{font-size:13px;line-height:1.7}
+.seg.manual .tx{color:var(--muted)}
+.seg .tag{display:inline-block;margin-right:4px;padding:0 4px;border:1px solid var(--line);border-radius:4px;font-size:11px;color:var(--faint)}
+#interimLine{display:none}
+#interimLine.show{display:flex}
+#interimLine .tx{color:var(--muted);font-style:italic}
+.empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 24px;text-align:center;color:var(--faint)}
+.empty .big{font-size:30px}
+.empty .main-line{font-size:13px;color:var(--muted)}
+.empty .sub{font-size:12px;line-height:1.7}
+#manualRow{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--line-soft);background:var(--panel)}
+#manualInput{flex:1;min-width:0;padding:6px 8px;border-radius:6px;font-size:13px;background:var(--panel-soft);border:1px solid var(--line)}
+
+/* ── 顧問欄 ── */
+#advTools{display:flex;flex-direction:column;gap:8px;padding:12px;border-bottom:1px solid var(--line-soft)}
+#btnTactic{width:100%;padding:12px 0;border-radius:8px;font-size:15px;font-weight:700;border:1px solid var(--amber);background:var(--amber);color:#141414;box-shadow:0 0 24px var(--amber-soft)}
+#btnTactic:disabled{background:var(--amber-soft);color:var(--amber);box-shadow:none}
+.tool-row{display:flex;gap:8px}
+.tool-row .btn{flex:1;padding:8px 0;border-radius:8px;font-weight:500}
+#btnCrux{border-color:var(--blue);color:var(--blue)}
+#btnCrux:disabled{background:var(--blue-soft)}
+#btnGoal{border-color:var(--green);color:var(--green)}
+#btnGoal:disabled{background:var(--green-soft)}
+#btnRadar{width:100%;padding:6px 0;border-radius:8px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px dashed var(--line);color:var(--faint)}
+#btnRadar.on{border-color:var(--blue);color:var(--blue);background:var(--blue-soft)}
+#radarDot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block}
+#btnRadar.on #radarDot{background:var(--blue)}
+#pbHint{font-size:12px;color:var(--faint)}
+#adviceList{flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.card{background:var(--panel-soft);border-left:3px solid var(--amber);border-radius:8px;padding:12px}
+.card.goal{border-left-color:var(--green)}
+.card.crux{border-left-color:var(--blue)}
+.card .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.card .kind{font-size:12px;font-weight:700;color:var(--amber)}
+.card.goal .kind{color:var(--green)}
+.card.crux .kind{color:var(--blue)}
+.card .meta{display:flex;align-items:center;gap:8px}
+.card .tc{font-family:var(--mono);font-size:12px;color:var(--faint)}
+.card .copy{font-size:12px;color:var(--faint)}
+.card .body{font-size:13px;line-height:1.7;white-space:pre-wrap}
+
+/* ── 彈窗 ── */
+.overlay{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.6)}
+.overlay.show{display:flex}
+.modal{width:100%;max-width:640px;max-height:100%;display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:var(--panel);border:1px solid var(--line)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+.modal-head .t{font-weight:700}
+.modal-body{flex:1;min-height:0;overflow-y:auto;padding:12px 16px}
+.modal-foot{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.x{font-size:18px;color:var(--muted);padding:0 4px}
+.md-h2{margin:14px 0 4px;font-size:14px;font-weight:700;letter-spacing:.02em;color:var(--amber)}
+.md-h1{margin:8px 0 4px;font-size:15px;font-weight:700}
+.md-li{padding-left:16px;font-size:13px;line-height:1.75}
+.md-p{font-size:13px;line-height:1.75}
+.md-sp{height:6px}
+.loading-center{padding:56px 0;text-align:center;font-size:13px;color:var(--muted)}
+
+/* ── 設定 ── */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.field input,.field select{width:100%;padding:8px 10px;border-radius:6px;font-size:13px;background:var(--panel-soft);border:1px solid var(--line)}
+.kgroup{border:1px solid var(--line-soft);border-radius:8px;padding:12px;margin-bottom:12px}
+.kgroup.active{border-color:var(--blue)}
+.kgroup .kt{font-size:13px;font-weight:700;margin-bottom:10px}
+.help{font-size:12px;color:var(--faint);line-height:1.7}
+.help a{color:var(--blue)}
+#testResult{font-size:12px;align-self:center}
+
+/* ── Toast ── */
+#toast{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:999px;font-size:13px;background:var(--panel-soft);border:1px solid var(--line)}
+#toast.show{display:block}
+</style>
+</head>
+<body data-tab="live">
+
+<header>
+  <div class="brand">
+    <span class="dot" id="recDot"></span>
+    <div>
+      <div class="name">會議戰情室</div>
+      <div class="eyebrow">MEETING WAR ROOM · v0.3 STANDALONE</div>
+    </div>
+  </div>
+  <input id="meetingTitle" placeholder="輸入會議名稱…" />
+  <div id="timerBox">IDLE 00:00</div>
+  <button class="btn btn-green" id="btnSummary">生成會議紀錄</button>
+  <button class="btn" id="btnSettings" title="設定 AI 引擎與金鑰">⚙ 設定</button>
+  <button class="btn" id="btnReset" title="清除本場">清除</button>
+</header>
+
+<div id="errBar"><span class="mark">!</span><span id="errMsg"></span><button id="errClose" class="x">✕</button></div>
+
+<div class="tabs">
+  <button class="tab" data-tab="pb">作戰手冊</button>
+  <button class="tab active" data-tab="live">逐字稿</button>
+  <button class="tab" data-tab="adv">戰術顧問</button>
+</div>
+
+<main>
+  <!-- 左欄:Playbook -->
+  <section id="col-pb">
+    <div class="col-head">
+      <div><div class="eyebrow">PLAYBOOK</div><div class="t">作戰手冊</div></div>
+      <div style="display:flex;gap:6px">
+        <button class="mini" id="btnUpload">上傳 .md</button>
+        <button class="mini" id="btnTemplate">套用範本</button>
+        <input type="file" id="fileInput" accept=".md,.markdown,.txt" style="display:none" />
+      </div>
+    </div>
+    <textarea id="playbook" placeholder="貼上你的會議 Playbook:對方是誰、背景脈絡、本次目標、關鍵問題、底線與備案。
+
+沒有格式?按右上「套用範本」。"></textarea>
+    <div id="pbFoot">Playbook 未提供時,顧問只能給通用建議</div>
+  </section>
+
+  <!-- 中欄:即時逐字稿 -->
+  <section id="col-live">
+    <div class="col-head">
+      <div><div class="eyebrow">LIVE TRANSCRIPT</div><div class="t">即時逐字稿</div></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <select id="langSel">
+          <option value="zh-TW">中文(台灣)</option>
+          <option value="en-US">English</option>
+        </select>
+        <button class="mini" id="btnDownloadT" style="display:none">下載</button>
+        <button id="btnRec">● 開始錄音</button>
+      </div>
+    </div>
+    <div id="transcript">
+      <div class="empty" id="emptyLive">
+        <div class="big">🎙</div>
+        <div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div>
+        <div class="sub">即時辨識需要桌面版 Chrome 或 Edge 並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>
+      </div>
+      <div id="segList"></div>
+      <div class="seg" id="interimLine"><span class="tc">--:--</span><span class="tx"><span id="interimText"></span><span class="caret">▍</span></span></div>
+    </div>
+    <div id="manualRow">
+      <input id="manualInput" placeholder="手動輸入一句對話(測試或補充用),按 Enter 加入" />
+      <button class="btn" id="btnManual">加入</button>
+    </div>
+  </section>
+
+  <!-- 右欄:AI 戰術顧問 -->
+  <section id="col-adv">
+    <div class="col-head">
+      <div><div class="eyebrow">AI ADVISOR</div><div class="t">戰術顧問</div></div>
+    </div>
+    <div id="advTools">
+      <button id="btnTactic">⚡ 戰術建議</button>
+      <div class="tool-row">
+        <button class="btn" id="btnCrux">🔍 癥結追問</button>
+        <button class="btn" id="btnGoal">🎯 目標檢查</button>
+      </div>
+      <button id="btnRadar"><span id="radarDot"></span><span id="radarLabel">癥結雷達 OFF · 點擊開啟自動診斷</span></button>
+      <div id="pbHint">提示:先在「作戰手冊」放入 Playbook,建議會更貼近你的目標。</div>
+    </div>
+    <div id="adviceList">
+      <div class="empty" id="emptyAdv">
+        <div class="big">⚡</div>
+        <div class="main-line">會議中隨時按一下「戰術建議」</div>
+        <div class="sub">系統會把 Playbook 加上最近的對話丟給 AI,<br>幾秒內回傳可以直接說出口的話術。<br>開啟「癥結雷達」則會在錄音中自動診斷討論卡點。</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 會議紀錄彈窗 -->
+<div class="overlay" id="sumModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><div class="eyebrow">MEETING NOTES</div><div class="t" id="sumTitle">會議紀錄</div></div>
+      <button class="x" id="sumClose">✕</button>
+    </div>
+    <div class="modal-body" id="sumBody"></div>
+    <div class="modal-foot" id="sumFoot" style="display:none">
+      <button class="btn" id="btnCopySum">複製紀錄</button>
+      <button class="btn btn-solid-green" id="btnDlSum">下載 .md(含逐字稿)</button>
+    </div>
+  </div>
+</div>
+
+<!-- 設定彈窗 -->
+<div class="overlay" id="setModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><div class="eyebrow">SETTINGS</div><div class="t">AI 引擎設定</div></div>
+      <button class="x" id="setClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="provSel">使用的 AI 引擎</label>
+        <select id="provSel">
+          <option value="gemini">Google Gemini(有免費額度,建議先用這個)</option>
+          <option value="claude">Anthropic Claude(需另外儲值 API)</option>
+        </select>
+      </div>
+      <div class="kgroup" id="gemGroup">
+        <div class="kt">Gemini</div>
+        <div class="field"><label for="gemKey">API 金鑰</label><input id="gemKey" type="password" placeholder="AIza…" autocomplete="off" /></div>
+        <div class="field"><label for="gemModel">模型名稱</label><input id="gemModel" autocomplete="off" /></div>
+        <div class="help">拿金鑰:到 <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a> → 右上「Get API key」→「Create API key」,複製貼上即可。</div>
+      </div>
+      <div class="kgroup" id="claGroup">
+        <div class="kt">Claude</div>
+        <div class="field"><label for="claKey">API 金鑰</label><input id="claKey" type="password" placeholder="sk-ant-…" autocomplete="off" /></div>
+        <div class="field"><label for="claModel">模型名稱</label><input id="claModel" autocomplete="off" /></div>
+        <div class="help">拿金鑰:到 <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a> 註冊並小額儲值後,在 API Keys 建立。注意:這與 Claude.ai 訂閱分開計費。</div>
+      </div>
+      <div class="help" style="margin-top:4px">隱私:金鑰與會議資料只存在這台裝置的瀏覽器裡,不會上傳到任何伺服器;AI 呼叫由你的瀏覽器直接連到 Google / Anthropic。請勿在共用電腦儲存金鑰。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnTestSet">測試連線</button>
+      <button class="btn btn-solid-green" id="btnSaveSet">儲存設定</button>
+      <span id="testResult"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ───────────────────────── 基礎工具 ───────────────────────── */
+const $ = (id) => document.getElementById(id);
+const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
+
+function fmt(sec){
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), r = s%60;
+  const mm = String(m).padStart(2,"0"), rr = String(r).padStart(2,"0");
+  return h>0 ? h+":"+mm+":"+rr : mm+":"+rr;
+}
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function debounce(fn, ms){
+  let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
+}
+
+let toastTimer = null;
+function flash(msg){
+  const el = $("toast"); el.textContent = msg; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>el.classList.remove("show"), 2200);
+}
+function showErr(msg){ $("errMsg").textContent = msg; $("errBar").classList.add("show"); }
+function hideErr(){ $("errBar").classList.remove("show"); }
+
+/* ───────────────────────── 設定(localStorage)───────────────────────── */
+const DEFAULT_SETTINGS = {
+  provider: "gemini",
+  geminiKey: "", geminiModel: "gemini-2.5-flash",
+  claudeKey: "", claudeModel: "claude-sonnet-4-6"
+};
+let settings = { ...DEFAULT_SETTINGS };
+try {
+  const raw = localStorage.getItem("wr-settings");
+  if (raw) settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+} catch (_) {}
+
+function saveSettingsToStorage(){
+  try { localStorage.setItem("wr-settings", JSON.stringify(settings)); } catch(_){}
+}
+function currentKey(){ return settings.provider === "gemini" ? settings.geminiKey : settings.claudeKey; }
+
+/* ───────────────────────── 狀態 ───────────────────────── */
+const state = {
+  recording: false,
+  segments: [],        // {id, t, text, source}
+  advices: [],         // {id, t, kind, auto, text}
+  summary: "",
+  elapsed: 0,
+  startTime: 0,
+  radarOn: false,
+  lastScan: { count: 0, time: 0 },
+  busy: { tactic:false, crux:false, goal:false, summary:false }
+};
+let recognition = null;
+let restartTimer = null;
+let tickTimer = null;
+
+/* ───────────────────────── 場次自動存檔 ───────────────────────── */
+const saveSession = debounce(() => {
+  try {
+    localStorage.setItem("wr-session", JSON.stringify({
+      title: $("meetingTitle").value,
+      playbook: $("playbook").value,
+      segments: state.segments,
+      advices: state.advices,
+      summary: state.summary,
+      elapsed: state.elapsed,
+      savedAt: Date.now()
+    }));
+  } catch(_){}
+}, 400);
+
+function restoreSession(){
+  try {
+    const raw = localStorage.getItem("wr-session");
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    $("meetingTitle").value = s.title || "";
+    $("playbook").value = s.playbook || "";
+    state.segments = Array.isArray(s.segments) ? s.segments : [];
+    state.advices  = Array.isArray(s.advices)  ? s.advices  : [];
+    state.summary  = s.summary || "";
+    state.elapsed  = s.elapsed || 0;
+    state.lastScan = { count: state.segments.length, time: 0 };
+    state.segments.forEach(appendSegNode);
+    state.advices.slice().reverse().forEach(a => prependAdviceCard(a, false));
+    refreshChrome();
+    if (state.segments.length) flash("已還原上次的會議資料");
+  } catch(_){}
+}
+
+/* ───────────────────────── Playbook 範本 ───────────────────────── */
+const PLAYBOOK_TEMPLATE = `# 會議 Playbook
+
+## 對方是誰
+- 姓名/職稱:
+- 決策角色:
+
+## 背景脈絡
+- 
+
+## 本次目標(依優先序)
+1. 
+2. 
+3. 
+
+## 關鍵問題(一定要問)
+- 
+
+## 底線與備案
+- 可讓步:
+- 不可讓步:
+`;
+
+/* ───────────────────────── AI 提示詞 ───────────────────────── */
+const tacticPrompt = (playbook, recent) => `你是會議中的即時戰術顧問,具備 PMP 專案管理思維(範疇、時程、風險、利害關係人)與 Google 式會議文化(數據導向、明確 owner、對事不對人)。使用者在 HRIS 部門,正在開會,只有幾秒鐘掃你的建議,務必精簡。
+
+【會議 Playbook】
+${playbook.trim() || "(未提供,請給通用但具體的會議戰術)"}
+
+【最近的對話逐字稿】
+${recent || "(會議剛開始,尚無逐字稿。請根據 Playbook 建議開場策略)"}
+
+根據 Playbook 的目標與現場對話,給出最多 3 點建議。格式:
+- 每點以「▸」開頭,先用一句話(15 字內)點出策略
+- 換行縮排,給一句可直接說出口的話術,用「」框起
+- 全部繁體中文,不要開場白、不要結語`;
+
+const cruxPrompt = (playbook, recent) => `你是會議中的「癥結點分析師」,具備 PMP 十大知識領域框架(整合、範疇、時程、成本、品質、資源、溝通、風險、採購、利害關係人)與 Google 式會議文化(用數據說話、明確 owner、決而後行)。使用者在 HRIS 部門,需要在會議進行中即時看穿討論卡在哪裡,並委婉但精準地追問。
+
+【會議 Playbook】
+${playbook.trim() || "(未提供)"}
+
+【最近的對話逐字稿】
+${recent || "(尚無逐字稿)"}
+
+任務:診斷目前討論「真正卡住的地方」,並給出可以直接開口的追問。
+
+輸出格式(繁體中文,不要開場白、不要結語):
+◆ 癥結:【知識領域】一句話診斷(20 字內)
+(最多 2 個,按嚴重度排序;常見類型如:範疇潛變、owner 不明、期限無共識、風險未量化、決策缺數據、利害關係人未對齊)
+
+追問(2-3 句,語氣專業委婉、對事不對人、給對方台階,讓討論往前走):
+1. 「…」
+2. 「…」
+
+追問設計原則:優先問數據與依據;確認 owner 與期限(RACI:誰負責、誰拍板);用 5 Whys 往根因挖;必要時 pre-mortem(「如果三個月後這件事失敗,最可能是因為什麼?」);行動項目用 SMART 檢核。若逐字稿太少不足以診斷,直說,並給一句讓討論聚焦的開場問句。`;
+
+const goalPrompt = (playbook, recent) => `你是會議目標檢查員。對照 Playbook 列出的目標,檢查目前逐字稿的達成狀況。
+
+【會議 Playbook】
+${playbook.trim() || "(未提供)"}
+
+【目前逐字稿】
+${recent || "(尚無逐字稿)"}
+
+輸出格式(繁體中文,不要開場白):
+- 每個目標一行:先標「✅ 已談到」「⚠️ 部分」或「❌ 未談到」,接目標名稱,再用一句話說依據
+- 最後一行以「收尾建議:」開頭,給一句話
+若 Playbook 未提供目標,請直接說明並建議會後補上。`;
+
+const summaryPrompt = (playbook, title, full) => `你是專業會議記錄員。根據 Playbook 與完整逐字稿,產出結構化會議紀錄。繁體中文、Markdown 格式,只輸出紀錄本身,不要任何開場白。
+
+會議名稱:${title || "未命名會議"}
+
+【會議 Playbook】
+${playbook.trim() || "(未提供)"}
+
+【完整逐字稿】
+${full}
+
+輸出結構:
+## 會議摘要
+(3-5 句)
+## 關鍵決策
+## 行動項目
+(格式:- [ ] 事項 — 負責人/期限;逐字稿沒提到就寫「待指派」)
+## 討論重點
+## 風險與待決事項
+(PMP 視角:範疇/時程/資源/利害關係人相關,尚未解決或未拍板的風險)
+## 未涵蓋議題
+(對照 Playbook 目標,列出沒談到的;Playbook 未提供則寫「無 Playbook 可對照」)`;
+
+/* ───────────────────────── AI 呼叫(雙引擎)───────────────────────── */
+function friendlyApiError(status, provider){
+  if (status === 401 || status === 403) return provider + " 金鑰無效或未授權,請到 ⚙ 設定檢查金鑰。";
+  if (status === 404) return provider + " 模型名稱可能有誤,請到 ⚙ 設定確認模型欄位。";
+  if (status === 429) return provider + " 請求太頻繁或額度已用盡,稍等再試。";
+  return provider + " 服務回應錯誤(" + status + "),請稍後重試。";
+}
+
+async function callAI(prompt){
+  if (!currentKey()){
+    openSettings();
+    throw new Error("尚未設定 API 金鑰。請在設定面板貼上金鑰後儲存(Gemini 有免費額度)。");
+  }
+  if (settings.provider === "gemini"){
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/"
+      + encodeURIComponent(settings.geminiModel.trim())
+      + ":generateContent?key=" + encodeURIComponent(settings.geminiKey.trim());
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1024 }
+      })
+    });
+    if (!res.ok) throw new Error(friendlyApiError(res.status, "Gemini"));
+    const data = await res.json();
+    const parts = data && data.candidates && data.candidates[0]
+      && data.candidates[0].content && data.candidates[0].content.parts;
+    const text = (parts || []).map(p => p.text || "").join("").trim();
+    if (!text) throw new Error("Gemini 未回傳內容(可能被安全機制攔下),請換個說法再試。");
+    return text;
+  } else {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": settings.claudeKey.trim(),
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: settings.claudeModel.trim(),
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    if (!res.ok) throw new Error(friendlyApiError(res.status, "Claude"));
+    const data = await res.json();
+    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    if (!text) throw new Error("Claude 未回傳內容,請稍後重試。");
+    return text;
+  }
+}
+
+/* ───────────────────────── 逐字稿 ───────────────────────── */
+function nowElapsed(){
+  return state.recording ? Math.floor((Date.now() - state.startTime)/1000) : state.elapsed;
+}
+
+function appendSegNode(seg){
+  const row = document.createElement("div");
+  row.className = "seg" + (seg.source === "manual" ? " manual" : "");
+  const tc = document.createElement("span");
+  tc.className = "tc"; tc.textContent = fmt(seg.t);
+  const tx = document.createElement("span");
+  tx.className = "tx";
+  if (seg.source === "manual"){
+    const tag = document.createElement("span");
+    tag.className = "tag"; tag.textContent = "手動";
+    tx.appendChild(tag);
+  }
+  tx.appendChild(document.createTextNode(seg.text));
+  row.appendChild(tc); row.appendChild(tx);
+  $("segList").appendChild(row);
+}
+
+function pushSegment(text, source){
+  const seg = { id: Date.now() + Math.random(), t: nowElapsed(), text, source };
+  state.segments.push(seg);
+  appendSegNode(seg);
+  refreshChrome();
+  scrollTranscript();
+  saveSession();
+  checkRadar();
+}
+
+function scrollTranscript(){
+  const el = $("transcript"); el.scrollTop = el.scrollHeight;
+}
+
+function setInterim(text){
+  if (text){
+    $("interimText").textContent = text;
+    $("interimLine").classList.add("show");
+  } else {
+    $("interimLine").classList.remove("show");
+  }
+  scrollTranscript();
+}
+
+function transcriptText(lastN){
+  const list = lastN ? state.segments.slice(-lastN) : state.segments;
+  return list.map(s => "[" + fmt(s.t) + "] " + s.text).join("\n");
+}
+function transcriptMD(){
+  return "# " + ($("meetingTitle").value || "未命名會議") + " — 逐字稿\n\n" + transcriptText();
+}
+
+/* ───────────────────────── 語音辨識 ───────────────────────── */
+function startRecording(){
+  hideErr();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){
+    showErr("此瀏覽器不支援即時語音辨識,建議改用桌面版 Chrome 或 Edge。也可以先用逐字稿欄底部的手動輸入,測試完整流程。");
+    return;
+  }
+  try {
+    const rec = new SR();
+    rec.lang = $("langSel").value;
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const r = e.results[i];
+        if (r.isFinal){
+          const clean = r[0].transcript.trim();
+          if (clean) pushSegment(clean, "voice");
+        } else {
+          interim += r[0].transcript;
+        }
+      }
+      setInterim(interim);
+    };
+    rec.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      if (e.error === "not-allowed" || e.error === "service-not-allowed"){
+        state.recording = false;
+        stopChrome();
+        showErr("無法取得麥克風權限。請在網址列左側允許麥克風後重試;或先用手動輸入測試流程。");
+      }
+    };
+    rec.onend = () => {
+      setInterim("");
+      if (state.recording){
+        restartTimer = setTimeout(() => { try { rec.start(); } catch(_){} }, 300);
+      }
+    };
+    recognition = rec;
+    state.startTime = Date.now() - state.elapsed * 1000;
+    state.recording = true;
+    rec.start();
+    startChrome();
+  } catch (e){
+    showErr("語音辨識啟動失敗:" + e.message);
+  }
+}
+
+function stopRecording(){
+  state.recording = false;
+  clearTimeout(restartTimer);
+  setInterim("");
+  try { recognition && recognition.stop(); } catch(_){}
+  stopChrome();
+  saveSession();
+}
+
+function startChrome(){
+  $("btnRec").textContent = "■ 暫停";
+  $("btnRec").classList.add("on");
+  $("recDot").classList.add("on","pulse");
+  $("langSel").disabled = true;
+  tickTimer = setInterval(() => {
+    state.elapsed = Math.floor((Date.now() - state.startTime)/1000);
+    $("timerBox").textContent = "REC " + fmt(state.elapsed);
+    $("timerBox").classList.add("on");
+  }, 1000);
+  $("timerBox").textContent = "REC " + fmt(state.elapsed);
+  $("timerBox").classList.add("on");
+  updateRadarDot();
+}
+function stopChrome(){
+  $("btnRec").textContent = "● 開始錄音";
+  $("btnRec").classList.remove("on");
+  $("recDot").classList.remove("on","pulse");
+  $("langSel").disabled = false;
+  clearInterval(tickTimer);
+  $("timerBox").textContent = "IDLE " + fmt(state.elapsed);
+  $("timerBox").classList.remove("on");
+  updateRadarDot();
+}
+
+/* ───────────────────────── 顧問(戰術/癥結/目標)───────────────────────── */
+function setBusy(kind, busy){
+  state.busy[kind] = busy;
+  if (kind === "tactic"){ $("btnTactic").disabled = busy; $("btnTactic").textContent = busy ? "顧問思考中…" : "⚡ 戰術建議"; }
+  if (kind === "crux"){ $("btnCrux").disabled = busy; $("btnCrux").textContent = busy ? "診斷中…" : "🔍 癥結追問"; }
+  if (kind === "goal"){ $("btnGoal").disabled = busy; $("btnGoal").textContent = busy ? "檢查中…" : "🎯 目標檢查"; }
+}
+
+function prependAdviceCard(a, save){
+  $("emptyAdv") && $("emptyAdv").remove();
+  const card = document.createElement("div");
+  card.className = "card " + (a.kind === "goal" ? "goal" : a.kind === "crux" ? "crux" : "tactic");
+  const head = document.createElement("div"); head.className = "head";
+  const kind = document.createElement("span"); kind.className = "kind";
+  kind.textContent = a.kind === "goal" ? "目標檢查" : a.kind === "crux" ? (a.auto ? "癥結雷達 · 自動" : "癥結追問") : "戰術建議";
+  const meta = document.createElement("span"); meta.className = "meta";
+  const tc = document.createElement("span"); tc.className = "tc"; tc.textContent = fmt(a.t);
+  const cp = document.createElement("button"); cp.className = "copy"; cp.textContent = "複製";
+  cp.addEventListener("click", () => copyText(a.text));
+  meta.appendChild(tc); meta.appendChild(cp);
+  head.appendChild(kind); head.appendChild(meta);
+  const body = document.createElement("div"); body.className = "body"; body.textContent = a.text;
+  card.appendChild(head); card.appendChild(body);
+  const list = $("adviceList");
+  list.insertBefore(card, list.firstChild);
+  if (save !== false) saveSession();
+}
+
+async function askAdvisor(kind, promptFn, auto){
+  if (state.busy[kind]) return;
+  setBusy(kind, true);
+  if (!auto) hideErr();
+  try {
+    const out = await callAI(promptFn($("playbook").value, transcriptText(14)));
+    const a = { id: Date.now(), t: nowElapsed(), kind, auto: !!auto, text: out };
+    state.advices.unshift(a);
+    prependAdviceCard(a);
+    if (kind === "crux"){
+      state.lastScan = { count: state.segments.length, time: Date.now() };
+    }
+  } catch (e){
+    if (!auto) showErr(e.message);
+    else state.lastScan.time = Date.now();
+  } finally {
+    setBusy(kind, false);
+  }
+}
+
+/* ───────────────────────── 癥結雷達 ───────────────────────── */
+function updateRadarDot(){
+  $("radarDot").classList.toggle("pulse", state.radarOn && state.recording);
+}
+function toggleRadar(){
+  state.radarOn = !state.radarOn;
+  $("btnRadar").classList.toggle("on", state.radarOn);
+  $("radarLabel").textContent = state.radarOn
+    ? "癥結雷達 ON · 錄音中自動診斷卡點"
+    : "癥結雷達 OFF · 點擊開啟自動診斷";
+  updateRadarDot();
+  flash(state.radarOn ? "癥結雷達已開啟:錄音中每累積約 6 段對話自動診斷一次" : "癥結雷達已關閉");
+  checkRadar();
+}
+function checkRadar(){
+  if (!state.radarOn || !state.recording || state.busy.crux) return;
+  const since = state.segments.length - state.lastScan.count;
+  const cooled = Date.now() - state.lastScan.time > 75000;
+  if (state.segments.length >= 4 && since >= 6 && cooled){
+    askAdvisor("crux", cruxPrompt, true);
+  }
+}
+
+/* ───────────────────────── 會議紀錄 ───────────────────────── */
+function mdToHtml(text){
+  return text.split("\n").map(ln => {
+    if (ln.startsWith("## ")) return '<div class="md-h2">' + esc(ln.slice(3)) + "</div>";
+    if (ln.startsWith("# "))  return '<div class="md-h1">' + esc(ln.slice(2)) + "</div>";
+    if (/^\s*[-*] /.test(ln)) return '<div class="md-li">• ' + esc(ln.replace(/^\s*[-*] /, "")) + "</div>";
+    if (!ln.trim()) return '<div class="md-sp"></div>';
+    return '<div class="md-p">' + esc(ln) + "</div>";
+  }).join("");
+}
+
+async function genSummary(){
+  if (!state.segments.length){
+    showErr("目前還沒有逐字稿,先錄一段或用手動輸入加入內容。");
+    return;
+  }
+  if (state.busy.summary) return;
+  state.busy.summary = true;
+  $("btnSummary").disabled = true; $("btnSummary").textContent = "整理中…";
+  $("sumTitle").textContent = ($("meetingTitle").value || "未命名會議") + " · 會議紀錄";
+  $("sumBody").innerHTML = '<div class="loading-center">正在對照 Playbook 整理逐字稿…</div>';
+  $("sumFoot").style.display = "none";
+  $("sumModal").classList.add("show");
+  hideErr();
+  try {
+    let full = transcriptText();
+    if (full.length > 24000) full = "(前段略)\n" + full.slice(-24000);
+    const out = await callAI(summaryPrompt($("playbook").value, $("meetingTitle").value, full));
+    state.summary = out;
+    $("sumBody").innerHTML = mdToHtml(out);
+    $("sumFoot").style.display = "flex";
+    saveSession();
+  } catch (e){
+    $("sumModal").classList.remove("show");
+    showErr(e.message);
+  } finally {
+    state.busy.summary = false;
+    $("btnSummary").disabled = false; $("btnSummary").textContent = "生成會議紀錄";
+  }
+}
+
+/* ───────────────────────── 匯出/複製 ───────────────────────── */
+function download(name, content){
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+async function copyText(t){
+  try {
+    await navigator.clipboard.writeText(t);
+    flash("已複製到剪貼簿");
+  } catch(_){
+    const ta = document.createElement("textarea");
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); flash("已複製到剪貼簿"); }
+    catch(__) { showErr("複製失敗,請手動選取文字。"); }
+    ta.remove();
+  }
+}
+function dateStr(){ return new Date().toISOString().slice(0,10); }
+
+/* ───────────────────────── 介面雜項 ───────────────────────── */
+function refreshChrome(){
+  const has = state.segments.length > 0;
+  $("emptyLive") && (has ? $("emptyLive").remove() : null);
+  $("btnDownloadT").style.display = has ? "" : "none";
+  $("btnSummary").classList.toggle("lit", has);
+  const pb = $("playbook").value;
+  $("pbFoot").textContent = pb.length ? pb.length + " 字" : "Playbook 未提供時,顧問只能給通用建議";
+  $("pbHint").style.display = pb.trim() ? "none" : "";
+  if (!state.recording) $("timerBox").textContent = "IDLE " + fmt(state.elapsed);
+}
+
+function resetSession(){
+  if (!window.confirm("清除本場所有逐字稿、建議與紀錄?此操作無法復原。")) return;
+  stopRecording();
+  state.segments = []; state.advices = []; state.summary = "";
+  state.elapsed = 0; state.lastScan = { count: 0, time: 0 };
+  $("segList").innerHTML = "";
+  $("adviceList").innerHTML = '<div class="empty" id="emptyAdv"><div class="big">⚡</div><div class="main-line">會議中隨時按一下「戰術建議」</div><div class="sub">系統會把 Playbook 加上最近的對話丟給 AI,<br>幾秒內回傳可以直接說出口的話術。<br>開啟「癥結雷達」則會在錄音中自動診斷討論卡點。</div></div>';
+  if (!$("emptyLive")){
+    const d = document.createElement("div");
+    d.className = "empty"; d.id = "emptyLive";
+    d.innerHTML = '<div class="big">🎙</div><div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div><div class="sub">即時辨識需要桌面版 Chrome 或 Edge 並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>';
+    $("transcript").insertBefore(d, $("segList"));
+  }
+  try { localStorage.removeItem("wr-session"); } catch(_){}
+  refreshChrome();
+  flash("已清除本場資料");
+}
+
+/* ───────────────────────── 設定面板 ───────────────────────── */
+function openSettings(){
+  $("provSel").value = settings.provider;
+  $("gemKey").value = settings.geminiKey;
+  $("gemModel").value = settings.geminiModel;
+  $("claKey").value = settings.claudeKey;
+  $("claModel").value = settings.claudeModel;
+  $("testResult").textContent = "";
+  highlightProvider();
+  $("setModal").classList.add("show");
+}
+function highlightProvider(){
+  const p = $("provSel").value;
+  $("gemGroup").classList.toggle("active", p === "gemini");
+  $("claGroup").classList.toggle("active", p === "claude");
+}
+function readSettingsForm(){
+  settings.provider = $("provSel").value;
+  settings.geminiKey = $("gemKey").value.trim();
+  settings.geminiModel = $("gemModel").value.trim() || DEFAULT_SETTINGS.geminiModel;
+  settings.claudeKey = $("claKey").value.trim();
+  settings.claudeModel = $("claModel").value.trim() || DEFAULT_SETTINGS.claudeModel;
+}
+async function testConnection(){
+  readSettingsForm();
+  $("testResult").textContent = "測試中…"; $("testResult").style.color = "var(--muted)";
+  try {
+    await callAI("請只回覆「連線成功」四個字。");
+    $("testResult").textContent = "✅ 連線成功"; $("testResult").style.color = "var(--green)";
+  } catch (e){
+    $("testResult").textContent = "❌ " + e.message; $("testResult").style.color = "var(--rec)";
+  }
+}
+
+/* ───────────────────────── 事件繫結 ───────────────────────── */
+on("btnRec", "click", () => state.recording ? stopRecording() : startRecording());
+on("btnManual", "click", addManual);
+on("manualInput", "keydown", (e) => { if (e.key === "Enter") addManual(); });
+function addManual(){
+  const v = $("manualInput").value.trim();
+  if (!v) return;
+  pushSegment(v, "manual");
+  $("manualInput").value = "";
+}
+
+on("btnTactic", "click", () => askAdvisor("tactic", tacticPrompt, false));
+on("btnCrux",  "click", () => askAdvisor("crux",  cruxPrompt,  false));
+on("btnGoal",  "click", () => askAdvisor("goal",  goalPrompt,  false));
+on("btnRadar", "click", toggleRadar);
+on("btnSummary", "click", genSummary);
+on("btnReset", "click", resetSession);
+on("errClose", "click", hideErr);
+
+on("btnTemplate", "click", () => { $("playbook").value = PLAYBOOK_TEMPLATE; refreshChrome(); saveSession(); });
+on("btnUpload", "click", () => $("fileInput").click());
+on("fileInput", "change", (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => { $("playbook").value = String(reader.result || ""); refreshChrome(); saveSession(); flash("Playbook 已載入"); };
+  reader.readAsText(f);
+  e.target.value = "";
+});
+on("playbook", "input", () => { refreshChrome(); saveSession(); });
+on("meetingTitle", "input", saveSession);
+
+on("btnDownloadT", "click", () => download(($("meetingTitle").value || "會議") + "-逐字稿-" + dateStr() + ".md", transcriptMD()));
+on("btnCopySum", "click", () => copyText(state.summary));
+on("btnDlSum", "click", () => download(($("meetingTitle").value || "會議紀錄") + "-" + dateStr() + ".md", state.summary + "\n\n---\n\n" + transcriptMD()));
+on("sumClose", "click", () => { if (!state.busy.summary) $("sumModal").classList.remove("show"); });
+$("sumModal").addEventListener("click", (e) => { if (e.target === $("sumModal") && !state.busy.summary) $("sumModal").classList.remove("show"); });
+
+on("btnSettings", "click", openSettings);
+on("setClose", "click", () => $("setModal").classList.remove("show"));
+$("setModal").addEventListener("click", (e) => { if (e.target === $("setModal")) $("setModal").classList.remove("show"); });
+on("provSel", "change", highlightProvider);
+on("btnTestSet", "click", testConnection);
+on("btnSaveSet", "click", () => {
+  readSettingsForm();
+  saveSettingsToStorage();
+  $("setModal").classList.remove("show");
+  flash("設定已儲存(只存在這台裝置)");
+});
+
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.body.dataset.tab = btn.dataset.tab;
+  });
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape"){
+    if (!state.busy.summary) $("sumModal").classList.remove("show");
+    $("setModal").classList.remove("show");
+  }
+});
+
+/* ───────────────────────── 啟動 ───────────────────────── */
+restoreSession();
+refreshChrome();
+if (!currentKey()){
+  setTimeout(() => flash("首次使用:請先按右上「⚙ 設定」貼上 API 金鑰"), 800);
+}
+</script>
+</body>
+</html>
