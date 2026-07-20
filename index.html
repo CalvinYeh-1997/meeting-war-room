@@ -77,9 +77,11 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
 #pbFoot{padding:6px 12px;font-size:12px;color:var(--faint);border-top:1px solid var(--line-soft)}
 
 /* ── 逐字稿欄 ── */
-#langSel{padding:4px 6px;border-radius:5px;font-size:12px;background:var(--panel-soft);color:var(--muted);border:1px solid var(--line)}
+#langSel,#speechMode{padding:4px 6px;border-radius:5px;font-size:12px;background:var(--panel-soft);color:var(--muted);border:1px solid var(--line)}
+#speechMode{max-width:146px}
 #btnRec{padding:6px 12px;border-radius:6px;font-size:13px;font-weight:700;border:1px solid var(--rec);color:var(--rec);background:var(--rec-soft)}
 #btnRec.on{background:var(--rec);color:#fff}
+#btnAudioImport{border-color:var(--blue);color:var(--blue)}
 #transcript{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px}
 .speech-status{display:flex;align-items:center;gap:6px;max-width:210px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;color:var(--faint);font-size:11px;white-space:nowrap;overflow:hidden}
 .speech-status .status-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
@@ -148,6 +150,17 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
 .md-p{font-size:13px;line-height:1.75}
 .md-sp{height:6px}
 .loading-center{padding:56px 0;text-align:center;font-size:13px;color:var(--muted)}
+.audio-picker{display:flex;flex-direction:column;gap:12px}
+.audio-drop{padding:18px;border:1px dashed var(--line);border-radius:10px;text-align:center;background:var(--panel-soft)}
+.audio-drop.ready{border-style:solid;border-color:var(--blue);text-align:left}
+.audio-file-name{font-weight:700;font-size:14px;overflow-wrap:anywhere}
+.audio-file-meta{margin-top:4px;color:var(--muted);font-size:12px}
+#audioPreview{display:none;width:100%;margin-top:12px}
+.progress-track{height:7px;overflow:hidden;border-radius:999px;background:var(--line)}
+#audioProgress{width:0;height:100%;border-radius:inherit;background:var(--blue);transition:width .2s ease}
+#audioStatus{min-height:20px;color:var(--muted);font-size:12px;line-height:1.6}
+.check-row{display:flex;align-items:flex-start;gap:8px;color:var(--muted);font-size:12px;line-height:1.5}
+.check-row input{margin-top:2px;accent-color:var(--green)}
 
 /* ── 設定 ── */
 .field{margin-bottom:14px}
@@ -167,6 +180,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
   header{padding:8px 10px}
   #meetingTitle{order:3;flex-basis:100%}
   .speech-status{max-width:150px}
+  #speechMode{max-width:128px}
   #manualRow{padding-bottom:max(8px,env(safe-area-inset-bottom))}
 }
 </style>
@@ -178,7 +192,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
     <span class="dot" id="recDot"></span>
     <div>
       <div class="name">會議戰情室</div>
-      <div class="eyebrow">PM FACILITATOR · v0.4 STANDALONE</div>
+      <div class="eyebrow">PM FACILITATOR · v0.5 STANDALONE</div>
     </div>
   </div>
   <input id="meetingTitle" placeholder="輸入會議名稱…" />
@@ -221,19 +235,25 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
         <div class="speech-status" id="speechStatus" data-state="idle" role="status" aria-live="polite" title="語音辨識狀態">
           <span class="status-dot"></span><span class="status-text" id="speechStatusText">尚未開始</span>
         </div>
+        <select id="speechMode" title="即時逐字稿引擎">
+          <option value="gemini-live">AI 即時（推薦）</option>
+          <option value="browser">瀏覽器即時</option>
+        </select>
         <select id="langSel">
           <option value="zh-TW">中文(台灣)</option>
           <option value="en-US">English</option>
         </select>
         <button class="mini" id="btnDownloadT" style="display:none">下載</button>
+        <button class="mini" id="btnAudioImport">匯入錄音</button>
         <button id="btnRec" aria-pressed="false">● 開始錄音</button>
+        <input type="file" id="audioFileInput" accept=".wav,.mp3,.aiff,.aif,.aac,.ogg,.flac,audio/wav,audio/mpeg,audio/aiff,audio/aac,audio/ogg,audio/flac" style="display:none" />
       </div>
     </div>
     <div id="transcript">
       <div class="empty" id="emptyLive">
         <div class="big">🎙</div>
         <div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div>
-        <div class="sub">即時辨識需要桌面版 Chrome 或 Edge、HTTPS/localhost,並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>
+        <div class="sub">建議使用「AI 即時」取得較穩定的現場轉錄;需 Gemini 金鑰並會使用 API 額度。<br>也可以匯入既有錄音檔,自動產出逐字稿與會議紀錄。</div>
       </div>
       <div id="segList"></div>
       <div class="seg" id="interimLine" role="status" aria-live="polite"><span class="tc">即時</span><span class="tx"><span id="interimText"></span><span class="caret">▍</span></span></div>
@@ -283,6 +303,33 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
   </div>
 </div>
 
+<!-- 錄音檔轉錄彈窗 -->
+<div class="overlay" id="audioModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><div class="eyebrow">AUDIO TRANSCRIPTION</div><div class="t">匯入錄音檔</div></div>
+      <button class="x" id="audioClose" aria-label="關閉錄音檔轉錄">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="audio-picker">
+        <div class="audio-drop" id="audioDrop">
+          <div class="audio-file-name" id="audioFileName">尚未選擇錄音檔</div>
+          <div class="audio-file-meta" id="audioFileMeta">支援 WAV、MP3、AIFF、AAC、OGG、FLAC；較大的檔案會先安全上傳至 Gemini Files API。</div>
+          <audio id="audioPreview" controls preload="metadata"></audio>
+        </div>
+        <div class="progress-track" aria-hidden="true"><div id="audioProgress"></div></div>
+        <div id="audioStatus" role="status" aria-live="polite">選擇檔案後即可開始轉錄。</div>
+        <label class="check-row"><input type="checkbox" id="audioAutoSummary" checked /><span>逐字稿完成後,自動依 Playbook 生成「會議摘要、決策、行動項目、風險與待決事項」。</span></label>
+        <div class="help">錄音只會傳送至你設定的 Google Gemini 服務進行轉錄;處理完成後會嘗試立即刪除暫存檔。請先確認會議參與者同意錄音與 AI 處理。</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnChooseAudio">選擇錄音檔</button>
+      <button class="btn btn-solid-green" id="btnTranscribeAudio" disabled>開始轉錄</button>
+    </div>
+  </div>
+</div>
+
 <!-- 設定彈窗 -->
 <div class="overlay" id="setModal">
   <div class="modal">
@@ -302,6 +349,7 @@ body[data-tab="pb"] #col-pb,body[data-tab="live"] #col-live,body[data-tab="adv"]
         <div class="kt">Gemini</div>
         <div class="field"><label for="gemKey">API 金鑰</label><input id="gemKey" type="password" placeholder="AIza…" autocomplete="off" /></div>
         <div class="field"><label for="gemModel">模型名稱</label><input id="gemModel" autocomplete="off" /></div>
+        <div class="field"><label for="gemLiveModel">即時語音模型</label><input id="gemLiveModel" autocomplete="off" /></div>
         <div class="help">拿金鑰:到 <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a> → 右上「Get API key」→「Create API key」,複製貼上即可。</div>
       </div>
       <div class="kgroup" id="claGroup">
@@ -352,7 +400,9 @@ function hideErr(){ $("errBar").classList.remove("show"); }
 /* ───────────────────────── 設定(localStorage)───────────────────────── */
 const DEFAULT_SETTINGS = {
   provider: "gemini",
+  speechMode: "gemini-live",
   geminiKey: "", geminiModel: "gemini-2.5-flash",
+  geminiLiveModel: "gemini-3.1-flash-live-preview",
   claudeKey: "", claudeModel: "claude-sonnet-4-6"
 };
 let settings = { ...DEFAULT_SETTINGS };
@@ -370,6 +420,8 @@ function currentKey(){ return settings.provider === "gemini" ? settings.geminiKe
 const state = {
   starting: false,
   recording: false,
+  recordingMode: "",
+  audioBusy: false,
   segments: [],        // {id, t, text, source}
   advices: [],         // {id, t, kind, auto, text}
   summary: "",
@@ -380,12 +432,23 @@ const state = {
   userStopping: false,
   restartAttempts: 0,
   lastScan: { count: 0, time: 0 },
-  busy: { tactic:false, crux:false, goal:false, summary:false }
+  busy: { tactic:false, crux:false, goal:false, summary:false, audio:false }
 };
 let recognition = null;
 let restartTimer = null;
 let tickTimer = null;
 let stopFinalizeTimer = null;
+let liveSocket = null;
+let liveStream = null;
+let liveAudioContext = null;
+let liveSource = null;
+let liveProcessor = null;
+let liveSilentGain = null;
+let liveTranscriptBuffer = "";
+let liveFlushTimer = null;
+let liveStopping = false;
+let selectedAudioFile = null;
+let audioObjectUrl = "";
 
 /* ───────────────────────── 場次自動存檔 ───────────────────────── */
 function persistSession(){
@@ -525,18 +588,25 @@ function friendlyApiError(status, provider){
 
 async function fetchWithTimeout(url, options, ms){
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms || 30000);
+  const limit = ms || 30000;
+  const timer = setTimeout(() => controller.abort(), limit);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (e){
-    if (e && e.name === "AbortError") throw new Error("AI 服務等待超過 30 秒,請稍後重試。");
+    if (e && e.name === "AbortError"){
+      const wait = limit >= 60000 ? Math.round(limit / 60000) + " 分鐘" : Math.round(limit / 1000) + " 秒";
+      throw new Error("AI 服務等待超過 " + wait + ",請稍後重試。");
+    }
     throw new Error("無法連線到 AI 服務。請檢查網路、瀏覽器擴充功能或公司防火牆設定。");
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function callAI(prompt){
+async function callAI(prompt, options){
+  const opts = options || {};
+  const maxTokens = opts.maxOutputTokens || 1024;
+  const timeoutMs = opts.timeoutMs || 30000;
   if (!currentKey()){
     openSettings();
     throw new Error("尚未設定 API 金鑰。請在設定面板貼上金鑰後儲存(Gemini 有免費額度)。");
@@ -550,9 +620,9 @@ async function callAI(prompt){
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1024 }
+        generationConfig: { maxOutputTokens: maxTokens }
       })
-    }, 30000);
+    }, timeoutMs);
     if (!res.ok) throw new Error(friendlyApiError(res.status, "Gemini"));
     const data = await res.json();
     const parts = data && data.candidates && data.candidates[0]
@@ -571,10 +641,10 @@ async function callAI(prompt){
       },
       body: JSON.stringify({
         model: settings.claudeModel.trim(),
-        max_tokens: 1024,
+        max_tokens: maxTokens,
         messages: [{ role: "user", content: prompt }]
       })
-    }, 30000);
+    }, timeoutMs);
     if (!res.ok) throw new Error(friendlyApiError(res.status, "Claude"));
     const data = await res.json();
     const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
@@ -590,14 +660,21 @@ function nowElapsed(){
 
 function appendSegNode(seg){
   const row = document.createElement("div");
-  row.className = "seg" + (seg.source === "manual" ? " manual" : seg.source === "voice-partial" ? " partial" : "");
+  const imported = seg.source === "audio-file";
+  row.className = "seg" + (seg.source === "manual" ? " manual" : seg.source === "voice-partial" ? " partial" : imported ? " manual" : "");
   const tc = document.createElement("span");
   tc.className = "tc"; tc.textContent = fmt(seg.t);
   const tx = document.createElement("span");
   tx.className = "tx";
-  if (seg.source === "manual" || seg.source === "voice-partial"){
+  const sourceLabels = {
+    "manual": "手動",
+    "voice-partial": "語音暫存",
+    "gemini-live": "AI 即時",
+    "audio-file": "錄音檔"
+  };
+  if (sourceLabels[seg.source]){
     const tag = document.createElement("span");
-    tag.className = "tag"; tag.textContent = seg.source === "manual" ? "手動" : "語音暫存";
+    tag.className = "tag"; tag.textContent = sourceLabels[seg.source];
     tx.appendChild(tag);
   }
   tx.appendChild(document.createTextNode(seg.text));
@@ -606,9 +683,13 @@ function appendSegNode(seg){
 }
 
 function pushSegment(text, source){
+  return pushSegmentAt(text, source, nowElapsed());
+}
+
+function pushSegmentAt(text, source, atSeconds){
   const clean = String(text || "").replace(/\s+/g, " ").trim();
   if (!clean) return;
-  const seg = { id: Date.now() + Math.random(), t: nowElapsed(), text: clean, source };
+  const seg = { id: Date.now() + Math.random(), t: Math.max(0, Number(atSeconds) || 0), text: clean, source };
   state.segments.push(seg);
   appendSegNode(seg);
   refreshChrome();
@@ -662,13 +743,19 @@ function speechEnvironmentHint(){
   return "請確認網路、VPN 或公司防火牆沒有阻擋瀏覽器的語音辨識服務。";
 }
 
-async function preflightMicrophone(){
+async function requestMicrophoneStream(){
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     throw new Error("這個開啟方式無法存取麥克風。" + speechEnvironmentHint());
   }
-  let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
   } catch (e){
     const name = e && e.name;
     if (name === "NotAllowedError" || name === "SecurityError"){
@@ -681,15 +768,19 @@ async function preflightMicrophone(){
       throw new Error("麥克風目前無法讀取,可能正被其他程式占用。請關閉其他錄音程式後重試。");
     }
     throw new Error("麥克風檢查失敗:" + ((e && e.message) || "未知錯誤"));
-  } finally {
-    if (stream) stream.getTracks().forEach(track => track.stop());
   }
+}
+
+async function preflightMicrophone(){
+  const stream = await requestMicrophoneStream();
+  stream.getTracks().forEach(track => track.stop());
 }
 
 function finalizeUserStop(){
   clearTimeout(stopFinalizeTimer);
   if (state.userStopping && state.interim) pushSegment(state.interim, "voice-partial");
   state.userStopping = false;
+  state.recordingMode = "";
   setInterim("");
   setSpeechStatus("idle", "已暫停");
   saveSession();
@@ -697,11 +788,15 @@ function finalizeUserStop(){
 
 function failSpeech(message){
   freezeElapsed();
+  liveStopping = true;
   state.recording = false;
   state.starting = false;
   state.userStopping = false;
+  state.recordingMode = "";
   clearTimeout(restartTimer);
   clearTimeout(stopFinalizeTimer);
+  clearTimeout(liveFlushTimer);
+  cleanupGeminiLive(true);
   setInterim("");
   stopChrome();
   setSpeechStatus("error", "辨識中斷");
@@ -784,7 +879,7 @@ function createRecognition(SR){
   return rec;
 }
 
-async function startRecording(){
+async function startBrowserRecording(){
   if (state.starting || state.recording) return;
   hideErr();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -803,12 +898,14 @@ async function startRecording(){
     state.startTime = Date.now() - state.elapsed * 1000;
     state.userStopping = false;
     state.restartAttempts = 0;
+    state.recordingMode = "browser";
     state.recording = true;
     rec.start();
     startChrome();
     setSpeechStatus("working", "正在啟動辨識…");
   } catch (e){
     state.recording = false;
+    state.recordingMode = "";
     recognition = null;
     stopChrome();
     setSpeechStatus("error", "無法開始");
@@ -819,7 +916,7 @@ async function startRecording(){
   }
 }
 
-function stopRecording(){
+function stopBrowserRecording(){
   if (!state.recording) return;
   freezeElapsed();
   state.recording = false;
@@ -836,12 +933,242 @@ function stopRecording(){
   stopFinalizeTimer = setTimeout(finalizeUserStop, 1200);
 }
 
+function bytesToBase64(bytes){
+  let binary = "";
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  }
+  return btoa(binary);
+}
+
+function downsampleToPcm16(input, inputRate, outputRate){
+  if (!input || !input.length) return new Uint8Array(0);
+  const ratio = inputRate / outputRate;
+  const outputLength = Math.max(1, Math.round(input.length / ratio));
+  const buffer = new ArrayBuffer(outputLength * 2);
+  const view = new DataView(buffer);
+  for (let i = 0; i < outputLength; i++){
+    const start = Math.floor(i * ratio);
+    const end = Math.min(input.length, Math.floor((i + 1) * ratio));
+    let sum = 0;
+    for (let j = start; j < Math.max(start + 1, end); j++) sum += input[j] || 0;
+    const sample = Math.max(-1, Math.min(1, sum / Math.max(1, end - start)));
+    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return new Uint8Array(buffer);
+}
+
+function flushLiveTranscript(){
+  clearTimeout(liveFlushTimer);
+  const text = liveTranscriptBuffer.trim();
+  liveTranscriptBuffer = "";
+  setInterim("");
+  if (text) pushSegment(text, "gemini-live");
+}
+
+function handleLiveTranscript(text){
+  const incoming = String(text || "").replace(/\s+/g, " ").trim();
+  if (!incoming) return;
+  if (!liveTranscriptBuffer) liveTranscriptBuffer = incoming;
+  else if (incoming.startsWith(liveTranscriptBuffer)) liveTranscriptBuffer = incoming;
+  else if (!liveTranscriptBuffer.endsWith(incoming)) liveTranscriptBuffer += " " + incoming;
+  setInterim(liveTranscriptBuffer);
+  setSpeechStatus("working", "AI 即時轉寫中…");
+  clearTimeout(liveFlushTimer);
+  liveFlushTimer = setTimeout(flushLiveTranscript, 1100);
+}
+
+function stopLiveAudioCapture(){
+  try { liveProcessor && liveProcessor.disconnect(); } catch(_){ }
+  try { liveSource && liveSource.disconnect(); } catch(_){ }
+  try { liveSilentGain && liveSilentGain.disconnect(); } catch(_){ }
+  if (liveStream) liveStream.getTracks().forEach(track => track.stop());
+  try { liveAudioContext && liveAudioContext.close(); } catch(_){ }
+  liveProcessor = null;
+  liveSource = null;
+  liveSilentGain = null;
+  liveStream = null;
+  liveAudioContext = null;
+}
+
+function cleanupGeminiLive(closeSocket){
+  stopLiveAudioCapture();
+  if (closeSocket && liveSocket){
+    try { liveSocket.close(1000, "client stop"); } catch(_){ }
+    liveSocket = null;
+  }
+}
+
+function beginLiveAudioCapture(stream){
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error("此瀏覽器不支援即時音訊處理,請改用 Chrome 或 Edge。");
+  liveStream = stream;
+  liveAudioContext = new AudioCtx();
+  liveSource = liveAudioContext.createMediaStreamSource(stream);
+  liveProcessor = liveAudioContext.createScriptProcessor(4096, 1, 1);
+  liveSilentGain = liveAudioContext.createGain();
+  liveSilentGain.gain.value = 0;
+  liveProcessor.onaudioprocess = (event) => {
+    if (!state.recording || state.recordingMode !== "gemini-live") return;
+    const pcm = downsampleToPcm16(event.inputBuffer.getChannelData(0), liveAudioContext.sampleRate, 16000);
+    if (!pcm.length || !liveSocket || liveSocket.readyState !== WebSocket.OPEN) return;
+    liveSocket.send(JSON.stringify({
+      realtimeInput: { audio: { data: bytesToBase64(pcm), mimeType: "audio/pcm;rate=16000" } }
+    }));
+  };
+  liveSource.connect(liveProcessor);
+  liveProcessor.connect(liveSilentGain);
+  liveSilentGain.connect(liveAudioContext.destination);
+}
+
+async function startGeminiLiveRecording(){
+  if (state.starting || state.recording) return;
+  hideErr();
+  if (!settings.geminiKey.trim()){
+    openSettings();
+    setSpeechStatus("warning", "需設定 Gemini 金鑰");
+    showErr("AI 即時逐字稿需要 Gemini API 金鑰。請在設定面板貼上金鑰並儲存,或切換成「瀏覽器即時」。");
+    return;
+  }
+  if (!navigator.onLine){
+    setSpeechStatus("warning", "目前離線");
+    showErr("AI 即時逐字稿需要網路連線。");
+    return;
+  }
+  state.starting = true;
+  $("btnRec").disabled = true;
+  setSpeechStatus("working", "正在取得麥克風…");
+  liveStopping = false;
+  liveTranscriptBuffer = "";
+  let stream = null;
+  try {
+    stream = await requestMicrophoneStream();
+    setSpeechStatus("working", "正在連線 AI 即時服務…");
+    const endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key="
+      + encodeURIComponent(settings.geminiKey.trim());
+    const ws = new WebSocket(endpoint);
+    liveSocket = ws;
+    await new Promise((resolve, reject) => {
+      let ready = false;
+      const timer = setTimeout(() => {
+        if (!ready) reject(new Error("AI 即時服務連線逾時,請檢查網路或模型名稱。"));
+      }, 15000);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ setup: {
+          model: "models/" + settings.geminiLiveModel.trim(),
+          generationConfig: { responseModalities: ["AUDIO"] },
+          inputAudioTranscription: {},
+          systemInstruction: { parts: [{ text: "你只負責接收會議音訊供輸入轉寫,不要主動說話或回覆內容。" }] }
+        }}));
+      };
+      ws.onmessage = async (event) => {
+        try {
+          const raw = typeof event.data === "string" ? event.data : await event.data.text();
+          const message = JSON.parse(raw);
+          if (message.setupComplete && !ready){
+            ready = true;
+            clearTimeout(timer);
+            resolve();
+          }
+          const transcript = message.serverContent && message.serverContent.inputTranscription;
+          if (transcript && transcript.text) handleLiveTranscript(transcript.text);
+          if (message.goAway && !liveStopping){
+            failSpeech("AI 即時服務即將中斷,請重新開始錄音以建立新連線。");
+          }
+        } catch (e){
+          if (!ready){
+            clearTimeout(timer);
+            reject(new Error("AI 即時服務回傳了無法解析的資料。"));
+          }
+        }
+      };
+      ws.onerror = () => {
+        if (!ready){
+          clearTimeout(timer);
+          reject(new Error("AI 即時服務無法連線。請確認 Gemini 金鑰、模型名稱與公司網路設定。"));
+        }
+      };
+      ws.onclose = (event) => {
+        if (!ready){
+          clearTimeout(timer);
+          reject(new Error("AI 即時服務在完成設定前關閉(" + event.code + ")。請檢查金鑰或模型名稱。"));
+        } else if (!liveStopping && (state.recording || state.starting)){
+          failSpeech("AI 即時服務連線已中斷(" + event.code + "),請重新開始錄音。");
+        }
+      };
+    });
+    beginLiveAudioCapture(stream);
+    stream = null;
+    state.startTime = Date.now() - state.elapsed * 1000;
+    state.recordingMode = "gemini-live";
+    state.userStopping = false;
+    state.recording = true;
+    startChrome();
+    setSpeechStatus("listening", "AI 即時聆聽中");
+  } catch (e){
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    liveStopping = true;
+    cleanupGeminiLive(true);
+    state.recording = false;
+    state.recordingMode = "";
+    stopChrome();
+    setSpeechStatus("error", "無法開始");
+    showErr((e && e.message) || "AI 即時逐字稿啟動失敗,請稍後重試。");
+  } finally {
+    state.starting = false;
+    $("btnRec").disabled = false;
+  }
+}
+
+function stopGeminiLiveRecording(){
+  if (!state.recording) return;
+  freezeElapsed();
+  state.recording = false;
+  state.userStopping = true;
+  liveStopping = true;
+  clearTimeout(liveFlushTimer);
+  stopChrome();
+  setSpeechStatus("working", "正在完成最後一段…");
+  try {
+    if (liveSocket && liveSocket.readyState === WebSocket.OPEN){
+      liveSocket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+    }
+  } catch(_){ }
+  stopLiveAudioCapture();
+  stopFinalizeTimer = setTimeout(() => {
+    flushLiveTranscript();
+    if (liveSocket){
+      try { liveSocket.close(1000, "client stop"); } catch(_){ }
+      liveSocket = null;
+    }
+    state.userStopping = false;
+    state.recordingMode = "";
+    setSpeechStatus("idle", "已暫停");
+    saveSession();
+  }, 1500);
+}
+
+function startRecording(){
+  settings.speechMode = $("speechMode").value;
+  saveSettingsToStorage();
+  if (settings.speechMode === "gemini-live") startGeminiLiveRecording();
+  else startBrowserRecording();
+}
+
+function stopRecording(){
+  if (state.recordingMode === "gemini-live") stopGeminiLiveRecording();
+  else stopBrowserRecording();
+}
+
 function startChrome(){
   $("btnRec").textContent = "■ 暫停";
   $("btnRec").classList.add("on");
   $("btnRec").setAttribute("aria-pressed", "true");
   $("recDot").classList.add("on","pulse");
   $("langSel").disabled = true;
+  $("speechMode").disabled = true;
+  $("btnAudioImport").disabled = true;
   clearInterval(tickTimer);
   tickTimer = setInterval(() => {
     state.elapsed = Math.floor((Date.now() - state.startTime)/1000);
@@ -857,11 +1184,263 @@ function stopChrome(){
   $("btnRec").classList.remove("on");
   $("btnRec").setAttribute("aria-pressed", "false");
   $("recDot").classList.remove("on","pulse");
-  $("langSel").disabled = false;
+  $("langSel").disabled = $("speechMode").value === "gemini-live";
+  $("speechMode").disabled = false;
+  $("btnAudioImport").disabled = false;
   clearInterval(tickTimer);
   $("timerBox").textContent = "IDLE " + fmt(state.elapsed);
   $("timerBox").classList.remove("on");
   updateRadarDot();
+}
+
+/* ───────────────────────── 錄音檔匯入與轉錄 ───────────────────────── */
+const AUDIO_EXTENSIONS = new Set(["wav","mp3","aiff","aif","aac","ogg","flac"]);
+
+function formatBytes(bytes){
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B","KB","MB","GB"];
+  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return (bytes / Math.pow(1024, index)).toFixed(index ? 1 : 0) + " " + units[index];
+}
+
+function audioMimeType(file){
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const fallback = {
+    wav: "audio/wav", mp3: "audio/mpeg", aiff: "audio/aiff", aif: "audio/aiff",
+    aac: "audio/aac", ogg: "audio/ogg", flac: "audio/flac"
+  };
+  return file.type || fallback[ext] || "application/octet-stream";
+}
+
+function setAudioProgress(percent, status){
+  $("audioProgress").style.width = Math.max(0, Math.min(100, Number(percent) || 0)) + "%";
+  if (status) $("audioStatus").textContent = status;
+}
+
+function setAudioBusy(busy){
+  state.audioBusy = busy;
+  state.busy.audio = busy;
+  $("btnChooseAudio").disabled = busy;
+  $("btnTranscribeAudio").disabled = busy || !selectedAudioFile;
+  $("audioClose").disabled = busy;
+  $("btnTranscribeAudio").textContent = busy ? "轉錄處理中…" : "開始轉錄";
+}
+
+function chooseAudioFile(file){
+  if (!file) return;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!AUDIO_EXTENSIONS.has(ext)){
+    setAudioProgress(0, "不支援此格式。請改用 WAV、MP3、AIFF、AAC、OGG 或 FLAC。");
+    showErr("錄音檔格式不支援。請先轉成 WAV、MP3、AIFF、AAC、OGG 或 FLAC。");
+    return;
+  }
+  if (file.size > 1024 * 1024 * 1024){
+    setAudioProgress(0, "檔案超過 1 GB,建議先切分或壓縮後再匯入。");
+    return;
+  }
+  selectedAudioFile = file;
+  if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
+  audioObjectUrl = URL.createObjectURL(file);
+  $("audioPreview").src = audioObjectUrl;
+  $("audioPreview").style.display = "block";
+  $("audioFileName").textContent = file.name;
+  $("audioFileMeta").textContent = formatBytes(file.size) + " · " + audioMimeType(file)
+    + (file.size <= 15 * 1024 * 1024 ? " · 直接送出轉錄" : " · 將使用 Gemini Files API 上傳");
+  $("audioDrop").classList.add("ready");
+  $("btnTranscribeAudio").disabled = false;
+  setAudioProgress(0, state.segments.length
+    ? "檔案已就緒。轉錄內容會加入目前場次;若是不同會議,建議先按「新場次」。"
+    : "檔案已就緒,可開始轉錄。");
+  if (!$("meetingTitle").value.trim()){
+    $("meetingTitle").value = file.name.replace(/\.[^.]+$/, "");
+    saveSession();
+  }
+}
+
+function openAudioImport(){
+  if (state.recording || state.starting){
+    showErr("請先暫停即時錄音,再匯入錄音檔。");
+    return;
+  }
+  hideErr();
+  $("audioModal").classList.add("show");
+}
+
+function closeAudioImport(){
+  if (!state.audioBusy) $("audioModal").classList.remove("show");
+}
+
+function uploadFileBytes(url, file){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.timeout = 10 * 60 * 1000;
+    xhr.setRequestHeader("X-Goog-Upload-Offset", "0");
+    xhr.setRequestHeader("X-Goog-Upload-Command", "upload, finalize");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable){
+        const percent = 8 + Math.round((event.loaded / event.total) * 52);
+        setAudioProgress(percent, "正在上傳錄音檔… " + Math.round(event.loaded / event.total * 100) + "%");
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText);
+      else reject(new Error(friendlyApiError(xhr.status, "Gemini Files API")));
+    };
+    xhr.onerror = () => reject(new Error("錄音檔上傳失敗,請檢查網路或公司防火牆設定。"));
+    xhr.ontimeout = () => reject(new Error("錄音檔上傳超過 10 分鐘,請稍後重試或先壓縮檔案。"));
+    xhr.send(file);
+  });
+}
+
+async function uploadGeminiFile(file){
+  setAudioProgress(3, "正在建立安全上傳連線…");
+  const startUrl = "https://generativelanguage.googleapis.com/upload/v1beta/files?key="
+    + encodeURIComponent(settings.geminiKey.trim());
+  const startRes = await fetchWithTimeout(startUrl, {
+    method: "POST",
+    headers: {
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(file.size),
+      "X-Goog-Upload-Header-Content-Type": audioMimeType(file),
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ file: { display_name: file.name } })
+  }, 90000);
+  if (!startRes.ok) throw new Error(friendlyApiError(startRes.status, "Gemini Files API"));
+  const uploadUrl = startRes.headers.get("X-Goog-Upload-URL");
+  if (!uploadUrl) throw new Error("Gemini Files API 未提供上傳網址,請稍後重試。");
+  const responseText = await uploadFileBytes(uploadUrl, file);
+  const uploaded = JSON.parse(responseText || "{}");
+  let fileInfo = uploaded.file || uploaded;
+  if (!fileInfo.name || !fileInfo.uri) throw new Error("Gemini Files API 未回傳有效的檔案資訊。");
+  for (let i = 0; fileInfo.state === "PROCESSING" && i < 60; i++){
+    setAudioProgress(62, "錄音已上傳,正在等待音訊處理…");
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    const statusRes = await fetchWithTimeout(
+      "https://generativelanguage.googleapis.com/v1beta/" + fileInfo.name + "?key=" + encodeURIComponent(settings.geminiKey.trim()),
+      { method: "GET" }, 30000
+    );
+    if (!statusRes.ok) throw new Error(friendlyApiError(statusRes.status, "Gemini Files API"));
+    fileInfo = await statusRes.json();
+  }
+  if (fileInfo.state === "FAILED") throw new Error("Gemini 無法處理這個錄音檔,請確認格式與檔案是否完整。");
+  if (fileInfo.state === "PROCESSING") throw new Error("錄音檔處理時間過久,請稍後重試。");
+  return fileInfo;
+}
+
+async function deleteGeminiFile(fileInfo){
+  if (!fileInfo || !fileInfo.name) return;
+  try {
+    await fetchWithTimeout(
+      "https://generativelanguage.googleapis.com/v1beta/" + fileInfo.name + "?key=" + encodeURIComponent(settings.geminiKey.trim()),
+      { method: "DELETE" }, 30000
+    );
+  } catch(_){ }
+}
+
+function timestampSeconds(value){
+  const parts = String(value || "").split(":").map(Number);
+  if (parts.some(n => !Number.isFinite(n))) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return null;
+}
+
+function appendImportedTranscript(text){
+  const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  let count = 0;
+  let lastTime = 0;
+  let pending = "";
+  for (const line of lines){
+    const match = line.match(/^\[?((?:\d{1,2}:)?\d{1,2}:\d{2})\]?\s*(?:[-–—]\s*)?(.*)$/);
+    if (match){
+      if (pending){
+        pushSegmentAt(pending, "audio-file", lastTime);
+        count += 1;
+      }
+      lastTime = timestampSeconds(match[1]);
+      if (lastTime === null) lastTime = count * 30;
+      pending = match[2].trim();
+    } else if (pending){
+      pending += " " + line;
+    } else {
+      pending = line;
+      lastTime = count * 30;
+    }
+  }
+  if (pending){
+    pushSegmentAt(pending, "audio-file", lastTime);
+    count += 1;
+  }
+  return count;
+}
+
+async function transcribeAudioFile(){
+  if (!selectedAudioFile || state.audioBusy) return;
+  hideErr();
+  if (!settings.geminiKey.trim()){
+    $("audioModal").classList.remove("show");
+    openSettings();
+    showErr("錄音檔轉錄需要 Gemini API 金鑰。請在設定面板貼上金鑰並儲存。");
+    return;
+  }
+  setAudioBusy(true);
+  let uploadedFile = null;
+  try {
+    const file = selectedAudioFile;
+    const mimeType = audioMimeType(file);
+    let audioPart;
+    if (file.size <= 15 * 1024 * 1024){
+      setAudioProgress(8, "正在讀取錄音檔…");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      audioPart = { inlineData: { mimeType, data: bytesToBase64(bytes) } };
+      setAudioProgress(35, "錄音已讀取,正在準備轉錄…");
+    } else {
+      uploadedFile = await uploadGeminiFile(file);
+      audioPart = { fileData: { mimeType: uploadedFile.mimeType || mimeType, fileUri: uploadedFile.uri } };
+    }
+    const prompt = `請將這份會議錄音完整轉成逐字稿。請遵守以下格式與規則:
+1. 每個語意段落一行,格式固定為 [HH:MM:SS] 講者: 內容
+2. 根據聲音差異辨識講者;無法確認姓名時使用「講者 1」「講者 2」,不要猜姓名
+3. 保留原本使用的語言、數字、專有名詞與重要語氣,不要摘要、不要補寫、不要使用 Markdown 標題
+4. 使用繁體中文標點;聽不清楚時標示「[聽不清楚]」
+5. 從錄音開頭到結尾完整輸出,不要省略重複但有意義的討論`;
+    setAudioProgress(70, "AI 正在辨識講者、時間戳與逐字內容…");
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/"
+      + encodeURIComponent(settings.geminiModel.trim()) + ":generateContent?key=" + encodeURIComponent(settings.geminiKey.trim());
+    const res = await fetchWithTimeout(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }, audioPart] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 32768 }
+      })
+    }, 10 * 60 * 1000);
+    if (!res.ok) throw new Error(friendlyApiError(res.status, "Gemini 錄音轉錄"));
+    const data = await res.json();
+    const candidate = data && data.candidates && data.candidates[0];
+    const parts = candidate && candidate.content && candidate.content.parts;
+    const text = (parts || []).map(part => part.text || "").join("\n").trim();
+    if (!text) throw new Error("Gemini 未回傳逐字稿,請確認錄音是否含有可辨識的語音。");
+    setAudioProgress(92, "正在整理時間戳並加入本場逐字稿…");
+    const count = appendImportedTranscript(text);
+    if (!count) throw new Error("逐字稿格式無法解析,請稍後重試。");
+    const truncated = candidate && candidate.finishReason === "MAX_TOKENS";
+    setAudioProgress(100, "完成:已加入 " + count + " 段逐字稿" + (truncated ? "。錄音較長,輸出可能未完整。" : "。"));
+    flash("錄音檔轉錄完成:共 " + count + " 段");
+    if ($("audioAutoSummary").checked){
+      $("audioModal").classList.remove("show");
+      await genSummary();
+    }
+  } catch (e){
+    setAudioProgress(0, (e && e.message) || "錄音檔轉錄失敗,請稍後重試。");
+    showErr((e && e.message) || "錄音檔轉錄失敗,請稍後重試。");
+  } finally {
+    await deleteGeminiFile(uploadedFile);
+    setAudioBusy(false);
+  }
 }
 
 /* ───────────────────────── 顧問(戰術/癥結/目標)───────────────────────── */
@@ -961,8 +1540,13 @@ async function genSummary(){
   hideErr();
   try {
     let full = transcriptText();
-    if (full.length > 24000) full = "(前段略)\n" + full.slice(-24000);
-    const out = await callAI(summaryPrompt($("playbook").value, $("meetingTitle").value, full));
+    if (full.length > 120000){
+      full = full.slice(0, 60000) + "\n\n(中段內容因長度限制略去)\n\n" + full.slice(-60000);
+    }
+    const out = await callAI(
+      summaryPrompt($("playbook").value, $("meetingTitle").value, full),
+      { maxOutputTokens: 4096, timeoutMs: 90000 }
+    );
     state.summary = out;
     $("sumBody").innerHTML = mdToHtml(out);
     $("sumFoot").style.display = "flex";
@@ -1013,10 +1597,13 @@ function refreshChrome(){
 function resetSession(){
   if (!window.confirm("清除本場所有逐字稿、建議與紀錄?此操作無法復原。")) return;
   freezeElapsed();
-  state.recording = false; state.starting = false; state.userStopping = false;
-  clearTimeout(restartTimer); clearTimeout(stopFinalizeTimer);
+  state.recording = false; state.starting = false; state.userStopping = false; state.recordingMode = "";
+  liveStopping = true;
+  clearTimeout(restartTimer); clearTimeout(stopFinalizeTimer); clearTimeout(liveFlushTimer);
   try { recognition && recognition.abort(); } catch(_){}
   recognition = null;
+  cleanupGeminiLive(true);
+  liveTranscriptBuffer = "";
   setInterim("");
   stopChrome();
   setSpeechStatus("idle", "尚未開始");
@@ -1027,7 +1614,7 @@ function resetSession(){
   if (!$("emptyLive")){
     const d = document.createElement("div");
     d.className = "empty"; d.id = "emptyLive";
-    d.innerHTML = '<div class="big">🎙</div><div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div><div class="sub">即時辨識需要桌面版 Chrome 或 Edge、HTTPS/localhost,並允許麥克風。<br>也可以用下方手動輸入,先測試整個流程。</div>';
+    d.innerHTML = '<div class="big">🎙</div><div class="main-line">按下「開始錄音」,說話內容會即時出現在這裡</div><div class="sub">建議使用「AI 即時」取得較穩定的現場轉錄;需 Gemini 金鑰並會使用 API 額度。<br>也可以匯入既有錄音檔,自動產出逐字稿與會議紀錄。</div>';
     $("transcript").insertBefore(d, $("segList"));
   }
   try { localStorage.removeItem("wr-session"); } catch(_){}
@@ -1040,6 +1627,7 @@ function openSettings(){
   $("provSel").value = settings.provider;
   $("gemKey").value = settings.geminiKey;
   $("gemModel").value = settings.geminiModel;
+  $("gemLiveModel").value = settings.geminiLiveModel;
   $("claKey").value = settings.claudeKey;
   $("claModel").value = settings.claudeModel;
   $("testResult").textContent = "";
@@ -1055,6 +1643,7 @@ function readSettingsForm(){
   settings.provider = $("provSel").value;
   settings.geminiKey = $("gemKey").value.trim();
   settings.geminiModel = $("gemModel").value.trim() || DEFAULT_SETTINGS.geminiModel;
+  settings.geminiLiveModel = $("gemLiveModel").value.trim() || DEFAULT_SETTINGS.geminiLiveModel;
   settings.claudeKey = $("claKey").value.trim();
   settings.claudeModel = $("claModel").value.trim() || DEFAULT_SETTINGS.claudeModel;
 }
@@ -1071,6 +1660,26 @@ async function testConnection(){
 
 /* ───────────────────────── 事件繫結 ───────────────────────── */
 on("btnRec", "click", () => state.recording ? stopRecording() : startRecording());
+on("speechMode", "change", () => {
+  settings.speechMode = $("speechMode").value;
+  saveSettingsToStorage();
+  initializeSpeechStatus();
+});
+on("btnAudioImport", "click", openAudioImport);
+on("btnChooseAudio", "click", () => $("audioFileInput").click());
+on("audioFileInput", "change", (e) => {
+  chooseAudioFile(e.target.files && e.target.files[0]);
+  e.target.value = "";
+});
+on("btnTranscribeAudio", "click", transcribeAudioFile);
+on("audioClose", "click", closeAudioImport);
+$("audioModal").addEventListener("click", (e) => { if (e.target === $("audioModal")) closeAudioImport(); });
+$("audioDrop").addEventListener("dragover", (e) => { e.preventDefault(); $("audioDrop").classList.add("ready"); });
+$("audioDrop").addEventListener("dragleave", () => { if (!selectedAudioFile) $("audioDrop").classList.remove("ready"); });
+$("audioDrop").addEventListener("drop", (e) => {
+  e.preventDefault();
+  if (!state.audioBusy) chooseAudioFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+});
 on("btnManual", "click", addManual);
 on("manualInput", "keydown", (e) => { if (e.key === "Enter") addManual(); });
 function addManual(){
@@ -1115,6 +1724,7 @@ on("btnTestSet", "click", testConnection);
 on("btnSaveSet", "click", () => {
   readSettingsForm();
   saveSettingsToStorage();
+  initializeSpeechStatus();
   $("setModal").classList.remove("show");
   flash("設定已儲存(只存在這台裝置)");
 });
@@ -1129,6 +1739,7 @@ document.querySelectorAll(".tab").forEach(btn => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape"){
     if (!state.busy.summary) $("sumModal").classList.remove("show");
+    closeAudioImport();
     $("setModal").classList.remove("show");
   }
 });
@@ -1137,17 +1748,38 @@ window.addEventListener("offline", () => {
   else setSpeechStatus("warning", "目前離線");
 });
 window.addEventListener("online", () => {
-  if (!state.recording) setSpeechStatus("idle", "網路已恢復");
+  if (!state.recording) initializeSpeechStatus();
 });
 window.addEventListener("beforeunload", () => {
   freezeElapsed();
   persistSession();
-  state.recording = false; state.userStopping = false;
-  clearTimeout(restartTimer); clearTimeout(stopFinalizeTimer);
+  state.recording = false; state.userStopping = false; state.recordingMode = "";
+  liveStopping = true;
+  clearTimeout(restartTimer); clearTimeout(stopFinalizeTimer); clearTimeout(liveFlushTimer);
   try { recognition && recognition.abort(); } catch(_){}
+  cleanupGeminiLive(true);
+  if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl);
 });
 
 function initializeSpeechStatus(){
+  $("speechMode").value = settings.speechMode;
+  $("langSel").disabled = settings.speechMode === "gemini-live";
+  if (settings.speechMode === "gemini-live"){
+    if (!navigator.onLine){
+      setSpeechStatus("warning", "目前離線");
+      return;
+    }
+    if (location.protocol === "file:" || !window.isSecureContext){
+      setSpeechStatus("warning", "AI 即時需 HTTPS");
+      return;
+    }
+    if (!settings.geminiKey.trim()){
+      setSpeechStatus("warning", "需設定 Gemini 金鑰");
+      return;
+    }
+    setSpeechStatus("idle", "AI 即時準備就緒");
+    return;
+  }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR){
     setSpeechStatus("unsupported", "瀏覽器不支援");
